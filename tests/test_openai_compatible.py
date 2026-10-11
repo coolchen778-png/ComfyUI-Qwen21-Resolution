@@ -86,6 +86,18 @@ def test_validate_accepts_environment_secret_and_safe_headers(monkeypatch):
     backend.validate(_config(custom_headers='{"X-Provider": "newapi"}'), has_images=True)
 
 
+@pytest.mark.parametrize("header", ["x-api-key", "api-key", "Proxy-Authorization"])
+def test_validate_rejects_custom_credential_headers(monkeypatch, header):
+    monkeypatch.setenv("TEST_NEWAPI_KEY", "secret")
+    backend = OpenAICompatibleBackend(opener=lambda *args, **kwargs: None)
+
+    with pytest.raises(SkillPromptError, match="环境变量"):
+        backend.validate(
+            _config(custom_headers=json.dumps({header: "plaintext-secret"})),
+            has_images=False,
+        )
+
+
 @pytest.mark.parametrize(
     "overrides",
     [

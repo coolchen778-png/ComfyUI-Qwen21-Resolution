@@ -94,7 +94,7 @@ api_key_env = OPENAI_API_KEY
 api_custom_headers = {}
 ```
 
-`api_base_url` 可填写站点根地址、`/v1` 地址或完整 `/chat/completions` 地址，插件只规范化一次。`api_custom_headers` 必须是字符串键值 JSON，禁止在其中覆盖 `Authorization`。`api_max_image_side=0` 表示不缩放；其他正值会按最长边等比缩小 PNG。
+`api_base_url` 可填写站点根地址、`/v1` 地址或完整 `/chat/completions` 地址，插件只规范化一次。`api_custom_headers` 必须是字符串键值 JSON，禁止在其中保存 `Authorization`、`x-api-key` 等凭据 header。`api_max_image_side=0` 表示不缩放；其他正值会按最长边等比缩小 PNG。
 
 ## 输出
 

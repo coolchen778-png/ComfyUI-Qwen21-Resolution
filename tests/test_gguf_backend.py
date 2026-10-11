@@ -144,6 +144,21 @@ def test_select_handler_auto_matches_qwen_model_when_mtmd_missing(model_files):
     assert isinstance(selected, Qwen25)
 
 
+def test_select_handler_auto_without_projection_keeps_text_only_mode(model_files):
+    from skill_prompt.backends.gguf import discover_handlers, select_handler
+
+    model, _ = model_files
+    assert select_handler("auto", discover_handlers(runtime()), model, None) is None
+
+
+def test_select_handler_explicit_requires_projection(model_files):
+    from skill_prompt.backends.gguf import discover_handlers, select_handler
+
+    model, _ = model_files
+    with pytest.raises(SkillPromptError, match="投影"):
+        select_handler("mtmd", discover_handlers(runtime()), model, None)
+
+
 def test_select_handler_explicit_missing_is_labeled(model_files):
     from skill_prompt.backends.gguf import select_handler
 
@@ -209,6 +224,16 @@ def test_images_require_available_visual_handler(model_files):
     )
     with pytest.raises(SkillPromptError, match="可用.*handler"):
         backend.generate(request([Image.new("RGB", (1, 1))]), config(model, mmproj))
+
+
+def test_images_require_projection_path(model_files):
+    from skill_prompt.backends.gguf import GGUFBackend
+
+    model, _ = model_files
+    backend = GGUFBackend(runtime_loader=runtime)
+    with pytest.raises(SkillPromptError, match="投影"):
+        backend.generate(request([Image.new("RGB", (1, 1))]), config(model, None))
+    assert FakeLlama.loads == 0
 
 
 def test_generate_loads_model_and_sends_png_images(model_files):

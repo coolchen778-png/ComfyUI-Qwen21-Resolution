@@ -56,13 +56,14 @@ def _construct_handler(
     model_path: Path,
     mmproj_path: Path | None,
 ) -> Any:
+    if mmproj_path is None:
+        raise SkillPromptError("模型加载", "视觉 handler 需要 mmproj 投影文件")
     signature = inspect.signature(handler_class)
     kwargs: dict[str, str] = {}
-    projection = mmproj_path or model_path
     candidates = {
-        "clip_model_path": str(projection),
-        "mmproj_path": str(projection),
-        "model_path": str(projection),
+        "clip_model_path": str(mmproj_path),
+        "mmproj_path": str(mmproj_path),
+        "model_path": str(mmproj_path),
     }
     for name, value in candidates.items():
         if name in signature.parameters:
@@ -76,6 +77,10 @@ def select_handler(
     model_path: Path,
     mmproj_path: Path | None,
 ) -> Any | None:
+    if mmproj_path is None:
+        if name == "auto":
+            return None
+        raise SkillPromptError("模型加载", "显式视觉 handler 需要 mmproj 投影文件")
     if name != "auto":
         handler_class = handlers.get(name)
         if handler_class is None:
@@ -122,6 +127,8 @@ class GGUFBackend:
         mmproj_value = config.get("mmproj_path", "")
         if not isinstance(mmproj_value, str):
             raise SkillPromptError("模型加载", "mmproj_path 必须是字符串")
+        if has_images and not mmproj_value.strip():
+            raise SkillPromptError("模型加载", "图片输入需要 mmproj 视觉投影文件")
         if mmproj_value and not Path(mmproj_value).expanduser().is_file():
             raise SkillPromptError("模型加载", f"视觉投影文件不存在: {mmproj_value}")
 

@@ -38,8 +38,17 @@ def _parse_headers(value: Any) -> dict[str, str]:
         isinstance(key, str) and isinstance(item, str) for key, item in parsed.items()
     ):
         raise SkillPromptError("请求发送", "自定义 headers 必须是字符串键值 JSON 对象")
-    if any(key.casefold() == "authorization" for key in parsed):
-        raise SkillPromptError("请求发送", "Authorization 必须由 API 密钥环境变量生成")
+    credential_headers = {
+        "authorization",
+        "proxy-authorization",
+        "api-key",
+        "x-api-key",
+    }
+    if any(key.casefold() in credential_headers for key in parsed):
+        raise SkillPromptError(
+            "请求发送",
+            "凭据 header 必须由 API 密钥环境变量生成",
+        )
     return parsed
 
 
