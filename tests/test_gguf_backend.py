@@ -111,6 +111,21 @@ def test_discover_handlers_reports_only_available_classes():
     assert found == {"mtmd": MTMD, "qwen3-vl": Qwen3}
 
 
+def test_discover_handlers_supports_official_chat_format_module_and_mtmd_name():
+    from skill_prompt.backends.gguf import discover_handlers
+
+    official_runtime = SimpleNamespace(
+        llama_chat_format=SimpleNamespace(
+            MTMDChatHandler=MTMD,
+            Qwen25VLChatHandler=Qwen25,
+        )
+    )
+    assert discover_handlers(official_runtime) == {
+        "mtmd": MTMD,
+        "qwen2.5-vl": Qwen25,
+    }
+
+
 def test_select_handler_auto_prefers_mtmd_and_filters_constructor_arguments(model_files):
     from skill_prompt.backends.gguf import discover_handlers, select_handler
 

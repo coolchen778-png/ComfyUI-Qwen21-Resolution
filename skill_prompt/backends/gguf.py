@@ -13,9 +13,9 @@ from .base import ModelCache
 
 
 _HANDLER_ATTRIBUTES = {
-    "mtmd": "LlamaMTMDChatHandler",
-    "qwen2.5-vl": "Qwen25VLChatHandler",
-    "qwen3-vl": "Qwen3VLChatHandler",
+    "mtmd": ("MTMDChatHandler", "LlamaMTMDChatHandler"),
+    "qwen2.5-vl": ("Qwen25VLChatHandler",),
+    "qwen3-vl": ("Qwen3VLChatHandler",),
 }
 _HANDLER_CHOICES = {"auto", *_HANDLER_ATTRIBUTES}
 
@@ -23,15 +23,32 @@ _HANDLER_CHOICES = {"auto", *_HANDLER_ATTRIBUTES}
 def _load_runtime() -> Any:
     import llama_cpp
 
+    try:
+        from llama_cpp import llama_chat_format
+    except ImportError:
+        llama_chat_format = None
+
+    if llama_chat_format is not None:
+        setattr(llama_cpp, "llama_chat_format", llama_chat_format)
+
     return llama_cpp
 
 
 def discover_handlers(runtime: Any) -> dict[str, type]:
-    return {
-        name: handler
-        for name, attribute in _HANDLER_ATTRIBUTES.items()
-        if (handler := getattr(runtime, attribute, None)) is not None
-    }
+    sources = (runtime, getattr(runtime, "llama_chat_format", None))
+    discovered: dict[str, type] = {}
+    for name, attributes in _HANDLER_ATTRIBUTES.items():
+        for source in sources:
+            if source is None:
+                continue
+            for attribute in attributes:
+                handler = getattr(source, attribute, None)
+                if handler is not None:
+                    discovered[name] = handler
+                    break
+            if name in discovered:
+                break
+    return discovered
 
 
 def _construct_handler(
