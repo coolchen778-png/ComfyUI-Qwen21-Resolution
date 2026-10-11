@@ -4,7 +4,6 @@ from typing import Any
 
 from .errors import SkillPromptError
 
-
 _LEADING_THINK = re.compile(r"^\s*<think>(.*?)</think>\s*", re.DOTALL | re.IGNORECASE)
 _UNCLOSED_LEADING_THINK = re.compile(r"^\s*<think>", re.IGNORECASE)
 

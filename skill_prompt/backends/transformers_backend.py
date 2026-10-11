@@ -1,15 +1,14 @@
 import gc
 import re
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Hashable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Hashable
+from typing import Any
 
 from ..errors import SkillPromptError
 from ..types import PromptRequest
 from .base import ModelCache
-
 
 _DTYPES = {"auto", "float16", "bfloat16", "float32"}
 _ATTENTION = {"auto", "eager", "sdpa", "flash_attention_2"}

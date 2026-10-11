@@ -1,8 +1,8 @@
 import gc
 import inspect
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Hashable, Mapping
 from pathlib import Path
-from typing import Any, Hashable
+from typing import Any
 
 from ..errors import SkillPromptError
 from ..images import image_to_data_uri
@@ -10,7 +10,6 @@ from ..messages import build_openai_messages, estimate_text_tokens
 from ..response import extract_assistant_text
 from ..types import PromptRequest
 from .base import ModelCache
-
 
 _HANDLER_ATTRIBUTES = {
     "mtmd": ("MTMDChatHandler", "LlamaMTMDChatHandler"),
@@ -29,7 +28,7 @@ def _load_runtime() -> Any:
         llama_chat_format = None
 
     if llama_chat_format is not None:
-        setattr(llama_cpp, "llama_chat_format", llama_chat_format)
+        llama_cpp.llama_chat_format = llama_chat_format
 
     return llama_cpp
 

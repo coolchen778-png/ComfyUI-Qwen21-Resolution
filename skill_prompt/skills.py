@@ -1,10 +1,10 @@
 import warnings
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import Literal, Sequence
+from typing import Literal
 
 from .errors import SkillPromptError
-
 
 SkillSource = Literal["builtin", "user"]
 _ALLOWED_SUFFIXES = {".md", ".txt"}
