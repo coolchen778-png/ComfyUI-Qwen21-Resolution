@@ -2,6 +2,11 @@ import torch
 import torch.nn.functional as F
 
 try:
+    from .skill_prompt.node import QwenMultiSkillPromptGenerator
+except ImportError:
+    from skill_prompt.node import QwenMultiSkillPromptGenerator
+
+try:
     import comfy.utils
     HAS_COMFY = True
 except ImportError:
@@ -109,8 +114,10 @@ class Qwen21ResolutionResize:
 
 NODE_CLASS_MAPPINGS = {
     "Qwen21ResolutionResize": Qwen21ResolutionResize,
+    "QwenMultiSkillPromptGenerator": QwenMultiSkillPromptGenerator,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "Qwen21ResolutionResize": "Qwen 2.1 官方分辨率自动匹配缩放",
+    "QwenMultiSkillPromptGenerator": "Qwen 多 Skill 提示词生成器",
 }
