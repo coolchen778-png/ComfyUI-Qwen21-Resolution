@@ -114,6 +114,7 @@ def test_node_contract_and_registration():
         "raw_response",
         "combined_skills",
     )
+    assert QwenMultiSkillPromptGenerator.CATEGORY == "cbkk"
     assert "Qwen21ResolutionResize" in nodes.NODE_CLASS_MAPPINGS
     assert (
         nodes.NODE_CLASS_MAPPINGS["QwenMultiSkillPromptGenerator"]

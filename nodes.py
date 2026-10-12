@@ -79,7 +79,7 @@ class Qwen21ResolutionResize:
     RETURN_TYPES = ("IMAGE", "INT", "INT", "STRING")
     RETURN_NAMES = ("image", "width", "height", "aspect_ratio")
     FUNCTION = "resize_to_qwen21"
-    CATEGORY = "Qwen2.1/Resolution"
+    CATEGORY = "cbkk"
 
     def resize_to_qwen21(self, image: torch.Tensor, preset: str = "auto", upscale_method: str = "lanczos", crop: str = "disabled"):
         # ComfyUI IMAGE 格式为 [B, H, W, C]

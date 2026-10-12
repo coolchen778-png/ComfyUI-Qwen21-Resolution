@@ -10,6 +10,7 @@ def test_existing_resolution_matcher_is_preserved():
 
 def test_existing_resolution_node_contract_and_output():
     assert Qwen21ResolutionResize.RETURN_TYPES == ("IMAGE", "INT", "INT", "STRING")
+    assert Qwen21ResolutionResize.CATEGORY == "cbkk"
     image = torch.zeros((1, 8, 8, 3))
     output, width, height, ratio = Qwen21ResolutionResize().resize_to_qwen21(
         image, preset="1:1 (2048x2048)"

@@ -102,7 +102,7 @@ class QwenMultiSkillPromptGenerator:
     RETURN_TYPES = ("STRING", "STRING", "STRING")
     RETURN_NAMES = ("final_prompt", "raw_response", "combined_skills")
     FUNCTION = "generate"
-    CATEGORY = "Qwen/Prompt"
+    CATEGORY = "cbkk"
 
     @staticmethod
     def _parse_skill_ids(value: str) -> list[str]:

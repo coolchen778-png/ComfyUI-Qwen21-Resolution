@@ -37,7 +37,7 @@ git clone https://github.com/coolchen778-png/ComfyUI-Qwen21-Resolution.git
 
 ## 节点用法
 
-1. 在 `Qwen/Prompt` 分类添加 `Qwen 多 Skill 提示词生成器`。
+1. 在 `cbkk` 分类添加 `Qwen 多 Skill 提示词生成器`。
 2. 在 Skill 面板中选择一个或多个 Skill，并拖拽确定联合顺序。
 3. 填写任务描述；按需连接 `image_1` 到 `image_5`。每个端口只接受 `batch=1`，不允许第六张图。
 4. 选择 `gguf`、`transformers` 或 `online_api`。界面只显示当前后端相关字段，切换时不会删除其他后端已经填写的值。
