@@ -11,6 +11,7 @@ import {
 const NODE_NAME = "QwenMultiSkillPromptGenerator";
 
 function setWidgetVisible(node, widget, visible) {
+    if (!widget) return;
     if (!widget.__cbkkOriginalComputeSize) {
         widget.__cbkkOriginalComputeSize = widget.computeSize?.bind(widget);
     }
@@ -18,33 +19,49 @@ function setWidgetVisible(node, widget, visible) {
     widget.computeSize = visible
         ? widget.__cbkkOriginalComputeSize
         : () => [0, -4];
-    node.setDirtyCanvas(true, true);
+    node?.setDirtyCanvas?.(true, true);
 }
 
 function localizeWidgets(node) {
-    for (const widget of node.widgets || []) {
-        if (WIDGET_LABELS[widget.name]) widget.label = WIDGET_LABELS[widget.name];
+    for (const widget of node?.widgets || []) {
+        if (widget?.name && WIDGET_LABELS[widget.name]) {
+            widget.label = WIDGET_LABELS[widget.name];
+        }
     }
 }
 
 function syncModeWidgets(node) {
-    const backend = node.widgets?.find((widget) => widget.name === "backend");
-    const localModel = node.widgets?.find((widget) => widget.name === "local_model");
+    if (!node?.widgets) return;
+    const backend = node.widgets.find((w) => w.name === "backend");
+    const localModel = node.widgets.find((w) => w.name === "local_model");
     const mode = normalizeMode(backend?.value);
-    for (const widget of node.widgets || []) {
-        if (widget.name === "skills" || widget.name?.startsWith("cbkk_skill_")) continue;
+
+    for (const widget of node.widgets) {
+        if (!widget?.name) continue;
+        if (
+            widget.name === "skills" ||
+            widget.name.startsWith("cbkk_") ||
+            widget.name.includes("Skill")
+        ) {
+            continue;
+        }
         setWidgetVisible(
             node,
             widget,
-            isWidgetVisible(widget.name || "", mode, localModel?.value),
+            isWidgetVisible(widget.name, mode, localModel?.value),
         );
     }
-    node.setSize(node.computeSize());
+
+    const computed = node.computeSize ? node.computeSize() : [400, 480];
+    const targetW = Math.max(node.size?.[0] || 0, computed[0] || 0, 420);
+    const targetH = Math.max(node.size?.[1] || 0, computed[1] || 0, 480);
+    node.setSize?.([targetW, targetH]);
+    node.setDirtyCanvas?.(true, true);
 }
 
 function parseSelection(widget) {
     try {
-        const parsed = JSON.parse(widget.value || "[]");
+        const parsed = JSON.parse(widget?.value || "[]");
         return Array.isArray(parsed)
             ? parsed.filter((id) => typeof id === "string")
             : [];
@@ -57,7 +74,7 @@ function makeButton(label, title, primary = false) {
     const button = document.createElement("button");
     button.type = "button";
     button.textContent = label;
-    button.title = title;
+    button.title = title || "";
     button.style.cssText = [
         "padding:6px 10px",
         "border:1px solid #58736a",
@@ -89,7 +106,26 @@ async function uploadSkill(file) {
     return payload;
 }
 
+function ensureFileInput() {
+    let input = document.getElementById("cbkk-skill-file-input");
+    if (!input) {
+        input = document.createElement("input");
+        input.id = "cbkk-skill-file-input";
+        input.type = "file";
+        input.accept = ".md,.txt,text/plain,text/markdown";
+        input.style.display = "none";
+        document.body.appendChild(input);
+    }
+    return input;
+}
+
 function installSkillPicker(node, widget) {
+    if (node.__cbkkSkillPickerInstalled) {
+        node.__cbkkReloadSkills?.();
+        return;
+    }
+    node.__cbkkSkillPickerInstalled = true;
+
     let available = [];
     let selected = parseSelection(widget);
     let status = null;
@@ -98,7 +134,7 @@ function installSkillPicker(node, widget) {
     const commit = () => {
         widget.value = JSON.stringify(selected);
         widget.callback?.(widget.value);
-        node.setDirtyCanvas(true, true);
+        node.setDirtyCanvas?.(true, true);
     };
 
     const load = async () => {
@@ -109,67 +145,103 @@ function installSkillPicker(node, widget) {
             selected = selected.filter((id) => known.has(id));
             commit();
             render();
-            if (status) status.textContent = `已选择 ${selected.length} 个 Skill`;
+            if (status) status.textContent = `已扫描到 ${available.length} 个 Skill，已选 ${selected.length} 个`;
         } catch (error) {
-            if (status) status.textContent = `Skill 加载失败：${error.message}`;
-            else window.alert(`Skill 加载失败：${error.message}`);
+            const msg = `Skill 加载失败：${error.message}`;
+            if (status) status.textContent = msg;
+            else console.warn("[cbkk]", msg);
         }
     };
+    node.__cbkkReloadSkills = load;
 
-    const fileInput = document.createElement("input");
-    fileInput.type = "file";
-    fileInput.accept = ".md,.txt,text/plain,text/markdown";
-    fileInput.hidden = true;
-    fileInput.onchange = async () => {
-        const file = fileInput.files?.[0];
-        if (!file) return;
-        if (status) status.textContent = `正在上传 ${file.name}…`;
-        try {
-            const entry = await uploadSkill(file);
-            if (!selected.includes(entry.id)) selected.push(entry.id);
-            await load();
-        } catch (error) {
-            if (status) status.textContent = `Skill 上传失败：${error.message}`;
-            else window.alert(`Skill 上传失败：${error.message}`);
-        } finally {
-            fileInput.value = "";
-        }
+    const fileInput = ensureFileInput();
+
+    const handleUpload = () => {
+        fileInput.onchange = async () => {
+            const file = fileInput.files?.[0];
+            if (!file) return;
+            if (status) status.textContent = `正在上传 ${file.name}…`;
+            try {
+                const entry = await uploadSkill(file);
+                if (!selected.includes(entry.id)) selected.push(entry.id);
+                await load();
+                if (status) status.textContent = `上传成功并已加入已选：${entry.id}`;
+            } catch (error) {
+                const msg = `Skill 上传失败：${error.message}`;
+                if (status) status.textContent = msg;
+                alert(msg);
+            } finally {
+                fileInput.value = "";
+            }
+        };
+        fileInput.click();
     };
 
-    node.addWidget?.("button", "⬆ 上传 Skill 文件", null, () => fileInput.click(), {
+    // 1. 添加显式 LiteGraph 原生按钮（放置在 skills 控件紧上方）
+    const btnUpload = node.addWidget?.("button", "⬆ 上传本地 Skill 文件 (.md/.txt)", null, handleUpload, {
         serialize: false,
     });
-    node.addWidget?.("button", "↻ 刷新 Skill 列表", null, () => load(), {
+    const btnRefresh = node.addWidget?.("button", "↻ 刷新 Skill 列表", null, () => load(), {
         serialize: false,
     });
 
+    if (btnUpload && btnRefresh && Array.isArray(node.widgets)) {
+        const skillsIdx = node.widgets.indexOf(widget);
+        if (skillsIdx !== -1) {
+            const uIdx = node.widgets.indexOf(btnUpload);
+            if (uIdx !== -1) node.widgets.splice(uIdx, 1);
+            const rIdx = node.widgets.indexOf(btnRefresh);
+            if (rIdx !== -1) node.widgets.splice(rIdx, 1);
+            node.widgets.splice(skillsIdx, 0, btnUpload, btnRefresh);
+        }
+    }
+
+    // 如果不支持 DOMWidget，提供友好标签并直接返回
     if (typeof node.addDOMWidget !== "function") {
-        widget.label = "Skill 选择（JSON；可使用上方上传按钮）";
+        widget.label = "已选 Skill（JSON 格式；可通过上方按钮上传）";
         load();
         return;
     }
 
+    // 2. 构建富交互 DOM 选择面板
     setWidgetVisible(node, widget, false);
+
     const root = document.createElement("div");
-    root.style.cssText = "display:flex;flex-direction:column;gap:7px;padding:8px;background:#202725;color:#e5ebe8;font:12px sans-serif;border:1px solid #3f514b;border-radius:6px;min-height:190px";
+    root.style.cssText = [
+        "display:flex",
+        "flex-direction:column",
+        "gap:7px",
+        "padding:8px",
+        "background:#202725",
+        "color:#e5ebe8",
+        "font:12px sans-serif",
+        "border:1px solid #3f514b",
+        "border-radius:6px",
+        "min-height:240px",
+        "--comfy-widget-min-height:240px",
+    ].join(";");
 
     const heading = document.createElement("div");
     heading.textContent = "Skill 联合选择（不限数量，可拖拽排序）";
     heading.style.cssText = "font-weight:700;color:#d8eee7";
+
     const toolbar = document.createElement("div");
     toolbar.style.cssText = "display:flex;gap:6px;flex-wrap:wrap";
+
     const search = document.createElement("input");
     search.type = "search";
     search.placeholder = "搜索 Skill…";
     search.style.cssText = "flex:1;min-width:120px;background:#151918;color:#eee;border:1px solid #4a5551;border-radius:4px;padding:6px";
-    const refresh = makeButton("↻ 刷新", "重新扫描 Skill 目录");
-    const upload = makeButton("⬆ 上传 Skill", "上传 UTF-8 编码的 .md 或 .txt 文件", true);
-    refresh.onclick = load;
-    upload.onclick = () => fileInput.click();
-    toolbar.append(search, upload, refresh, fileInput);
+
+    const refreshBtn = makeButton("↻ 刷新", "重新扫描 Skill 目录");
+    const uploadBtn = makeButton("⬆ 上传 Skill", "上传 UTF-8 编码的 .md 或 .txt 文件", true);
+    refreshBtn.onclick = () => load();
+    uploadBtn.onclick = handleUpload;
+    toolbar.append(search, uploadBtn, refreshBtn);
 
     const columns = document.createElement("div");
-    columns.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:7px;min-height:130px";
+    columns.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:7px;min-height:140px";
+
     const choices = document.createElement("div");
     const chosen = document.createElement("div");
     for (const [element, title] of [
@@ -183,19 +255,23 @@ function installSkillPicker(node, widget) {
         element.style.cssText = "overflow:auto;max-height:230px;padding:6px;border:1px solid #3f4945;border-radius:4px;background:#171b1a";
     }
     columns.append(choices, chosen);
+
     status = document.createElement("div");
-    status.style.cssText = "min-height:16px;color:#a9bbb4";
+    status.style.cssText = "min-height:16px;color:#a9bbb4;font-size:11px";
     root.append(heading, toolbar, columns, status);
 
     const labelFor = (id) =>
         available.find((entry) => entry.id === id)?.relative_path || id;
+
     render = () => {
         choices.replaceChildren();
         chosen.replaceChildren();
+
         const choicesTitle = document.createElement("div");
         choicesTitle.textContent = "可选 Skill（点击添加）";
         choicesTitle.style.cssText = "font-weight:700;margin-bottom:5px;color:#bcd2ca";
         choices.append(choicesTitle);
+
         const chosenTitle = document.createElement("div");
         chosenTitle.textContent = "已选 Skill（拖拽排序）";
         chosenTitle.style.cssText = "font-weight:700;margin-bottom:5px;color:#bcd2ca";
@@ -204,9 +280,11 @@ function installSkillPicker(node, widget) {
         const query = search.value.trim().toLocaleLowerCase();
         for (const entry of available) {
             if (
-                selected.includes(entry.id)
-                || (query && !entry.id.toLocaleLowerCase().includes(query))
-            ) continue;
+                selected.includes(entry.id) ||
+                (query && !entry.id.toLocaleLowerCase().includes(query))
+            ) {
+                continue;
+            }
             const button = makeButton(
                 `${entry.source === "user" ? "用户" : "内置"}：${entry.relative_path}`,
                 `添加 ${entry.id}`,
@@ -226,17 +304,21 @@ function installSkillPicker(node, widget) {
             const row = document.createElement("div");
             row.draggable = true;
             row.style.cssText = "display:flex;align-items:center;gap:5px;margin-bottom:4px;padding:4px;background:#29322f;border-radius:4px;cursor:grab";
+
             const handle = document.createElement("span");
             handle.textContent = "☰";
+
             const label = document.createElement("span");
             label.textContent = `${index + 1}. ${labelFor(id)}`;
             label.style.flex = "1";
+
             const remove = makeButton("×", `移除 ${id}`);
             remove.onclick = () => {
                 selected.splice(index, 1);
                 commit();
                 render();
             };
+
             row.ondragstart = (event) =>
                 event.dataTransfer.setData("text/plain", String(index));
             row.ondragover = (event) => event.preventDefault();
@@ -253,23 +335,59 @@ function installSkillPicker(node, widget) {
             row.append(handle, label, remove);
             chosen.append(row);
         });
+
         status.textContent = `已选择 ${selected.length} 个 Skill`;
     };
 
     search.oninput = render;
+
     try {
-        node.addDOMWidget("cbkk_skill_picker", "Skill 联合选择", root, {
+        const domWidget = node.addDOMWidget("cbkk_skill_picker", "customwidget", root, {
             serialize: false,
+            getMinHeight: () => 240,
+            computeSize: () => [node.size?.[0] || 420, 240],
         });
+        if (domWidget) {
+            domWidget.serialize = false;
+        }
     } catch (error) {
         setWidgetVisible(node, widget, true);
-        widget.label = "Skill 选择（JSON；可使用上传按钮）";
-        console.warn("cbkk Skill 选择面板加载失败，已切换到兼容模式", error);
+        widget.label = "Skill 选择（JSON；可通过上方按钮上传）";
+        console.warn("[cbkk] DOMWidget 挂载失败，启用兼容模式", error);
         load();
         return;
     }
+
     render();
     load();
+}
+
+function setupNode(node) {
+    if (!node || !node.widgets) return;
+    localizeWidgets(node);
+
+    const backend = node.widgets.find((w) => w.name === "backend");
+    const localModel = node.widgets.find((w) => w.name === "local_model");
+    if (backend?.options) {
+        backend.options.values = [...VISIBLE_BACKEND_CHOICES];
+    }
+
+    for (const widget of [backend, localModel]) {
+        if (!widget || widget.__cbkkBound) continue;
+        widget.__cbkkBound = true;
+        const callback = widget.callback;
+        widget.callback = function () {
+            callback?.apply(this, arguments);
+            syncModeWidgets(node);
+        };
+    }
+
+    const skills = node.widgets.find((w) => w.name === "skills");
+    if (skills) {
+        installSkillPicker(node, skills);
+    }
+
+    syncModeWidgets(node);
 }
 
 app.registerExtension({
@@ -278,28 +396,30 @@ app.registerExtension({
         setCbkkNodeSource(defs);
     },
     async beforeRegisterNodeDef(nodeType, nodeData) {
-        if (nodeData.name !== NODE_NAME) return;
-        const original = nodeType.prototype.onNodeCreated;
+        if (nodeData?.name !== NODE_NAME) return;
+
+        const originalCreated = nodeType.prototype.onNodeCreated;
         nodeType.prototype.onNodeCreated = function () {
-            const result = original?.apply(this, arguments);
-            localizeWidgets(this);
-            const skills = this.widgets?.find((widget) => widget.name === "skills");
-            const backend = this.widgets?.find((widget) => widget.name === "backend");
-            const localModel = this.widgets?.find((widget) => widget.name === "local_model");
-            if (backend?.options) {
-                backend.options.values = [...VISIBLE_BACKEND_CHOICES];
-            }
-            if (skills) installSkillPicker(this, skills);
-            for (const widget of [backend, localModel]) {
-                if (!widget) continue;
-                const callback = widget.callback;
-                widget.callback = (...args) => {
-                    callback?.apply(widget, args);
-                    syncModeWidgets(this);
-                };
-            }
-            syncModeWidgets(this);
+            const result = originalCreated?.apply(this, arguments);
+            setTimeout(() => setupNode(this), 10);
             return result;
         };
+
+        const originalConfigure = nodeType.prototype.onConfigure;
+        nodeType.prototype.onConfigure = function () {
+            const result = originalConfigure?.apply(this, arguments);
+            setTimeout(() => setupNode(this), 10);
+            return result;
+        };
+    },
+    nodeCreated(node) {
+        if (node?.comfyClass === NODE_NAME) {
+            setTimeout(() => setupNode(node), 20);
+        }
+    },
+    loadedGraphNode(node) {
+        if (node?.comfyClass === NODE_NAME) {
+            setTimeout(() => setupNode(node), 20);
+        }
     },
 });
