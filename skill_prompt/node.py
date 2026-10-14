@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from collections.abc import Callable
 from typing import Any
 
 from .backends.base import BackendRegistry
@@ -8,6 +9,12 @@ from .backends.openai_compatible import OpenAICompatibleBackend
 from .backends.transformers_backend import TransformersBackend
 from .errors import SkillPromptError
 from .images import prepare_images
+from .models import (
+    LocalModelCatalog,
+    NO_LOCAL_MODEL,
+    NO_MMPROJ,
+    create_default_model_catalog,
+)
 from .response import strip_leading_think
 from .skills import SkillManager, SkillRoot
 from .types import PromptRequest
@@ -45,12 +52,15 @@ class QwenMultiSkillPromptGenerator:
         self,
         skill_manager: SkillManager | None = None,
         backend_registry: BackendRegistry | None = None,
+        model_catalog_factory: Callable[[], LocalModelCatalog] | None = None,
     ):
         self.skill_manager = skill_manager or create_default_skill_manager()
         self.backend_registry = backend_registry or create_default_backend_registry()
+        self.model_catalog_factory = model_catalog_factory or create_default_model_catalog
 
     @classmethod
     def INPUT_TYPES(cls):
+        catalog = create_default_model_catalog()
         return {
             "required": {
                 "task": (
@@ -58,7 +68,9 @@ class QwenMultiSkillPromptGenerator:
                     {"default": "", "multiline": True, "placeholder": "描述要生成的图像提示词"},
                 ),
                 "skills": ("STRING", {"default": "[]", "multiline": True}),
-                "backend": (["gguf", "transformers", "online_api"],),
+                "backend": (["本地模型", "在线 API"],),
+                "local_model": (catalog.main_choices(), {"default": NO_LOCAL_MODEL}),
+                "local_mmproj": (catalog.mmproj_choices(), {"default": NO_MMPROJ}),
                 "role_prompt": (
                     "STRING",
                     {
@@ -153,11 +165,41 @@ class QwenMultiSkillPromptGenerator:
             }
         raise SkillPromptError("模型加载", f"未知后端: {backend}")
 
+    def _resolve_backend(
+        self,
+        backend: str,
+        local_model: str,
+        local_mmproj: str,
+        values: dict[str, Any],
+    ) -> tuple[str, dict[str, Any]]:
+        if backend == "在线 API":
+            return "online_api", self._backend_config("online_api", values)
+        if backend == "本地模型":
+            catalog = self.model_catalog_factory()
+            entry = catalog.resolve_main(local_model)
+            selected_values = dict(values)
+            if entry.backend == "gguf":
+                mmproj = catalog.resolve_mmproj(local_mmproj)
+                selected_values["gguf_model_path"] = str(entry.path)
+                selected_values["gguf_mmproj_path"] = str(mmproj) if mmproj else ""
+            elif entry.backend == "transformers":
+                selected_values["transformers_model"] = str(entry.path)
+            else:
+                raise SkillPromptError(
+                    "模型选择", f"不支持的本地模型类型: {entry.backend}"
+                )
+            return entry.backend, self._backend_config(entry.backend, selected_values)
+        if backend in {"gguf", "transformers", "online_api"}:
+            return backend, self._backend_config(backend, values)
+        raise SkillPromptError("模型选择", f"未知运行方式: {backend}")
+
     def generate(
         self,
         task,
         skills,
         backend,
+        local_model=NO_LOCAL_MODEL,
+        local_mmproj=NO_MMPROJ,
         role_prompt="",
         max_new_tokens=1024,
         temperature=0.2,
@@ -214,8 +256,10 @@ class QwenMultiSkillPromptGenerator:
             seed=int(seed),
         )
         values = locals()
-        config = self._backend_config(backend, values)
-        adapter = self.backend_registry.get(backend)
+        selected_backend, config = self._resolve_backend(
+            backend, local_model, local_mmproj, values
+        )
+        adapter = self.backend_registry.get(selected_backend)
         try:
             adapter.validate(config, has_images=bool(images))
             raw_response = adapter.generate(request, config)

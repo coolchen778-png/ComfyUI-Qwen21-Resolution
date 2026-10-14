@@ -1,9 +1,11 @@
 import json
+from pathlib import Path
 
 import pytest
 import torch
 
 from skill_prompt.errors import SkillPromptError
+from skill_prompt.models import LocalModelEntry, NO_LOCAL_MODEL, NO_MMPROJ
 from skill_prompt.node import QwenMultiSkillPromptGenerator
 from skill_prompt.types import PromptRequest
 
@@ -51,11 +53,35 @@ class FakeRegistry:
         return self.backend
 
 
-def make_node(response="<think>hidden</think>FINAL"):
+class FakeCatalog:
+    def __init__(self, main_entries=(), mmproj_entries=()):
+        self.main = {entry.selection: entry for entry in main_entries}
+        self.mmproj = {entry.selection: entry.path for entry in mmproj_entries}
+
+    def main_choices(self):
+        return [NO_LOCAL_MODEL, *self.main]
+
+    def mmproj_choices(self):
+        return [NO_MMPROJ, *self.mmproj]
+
+    def resolve_main(self, selection):
+        return self.main[selection]
+
+    def resolve_mmproj(self, selection):
+        return None if selection == NO_MMPROJ else self.mmproj[selection]
+
+
+def make_node(response="<think>hidden</think>FINAL", catalog=None):
     skills = FakeSkills()
     backend = FakeBackend(response)
     registry = FakeRegistry(backend)
-    return QwenMultiSkillPromptGenerator(skills, registry), skills, backend, registry
+    factory = (lambda: catalog) if catalog is not None else None
+    return (
+        QwenMultiSkillPromptGenerator(skills, registry, factory),
+        skills,
+        backend,
+        registry,
+    )
 
 
 def settings(**overrides):
@@ -120,6 +146,75 @@ def test_node_contract_and_registration():
         nodes.NODE_CLASS_MAPPINGS["QwenMultiSkillPromptGenerator"]
         is QwenMultiSkillPromptGenerator
     )
+
+
+def test_input_types_offer_two_chinese_modes_and_scanned_model_choices(monkeypatch):
+    import skill_prompt.node as node_module
+
+    catalog = FakeCatalog(
+        [LocalModelEntry("GGUF｜qwen/model.gguf", "gguf", Path("model.gguf"))],
+        [LocalModelEntry("mmproj｜qwen/mmproj.gguf", "gguf", Path("mmproj.gguf"))],
+    )
+    monkeypatch.setattr(node_module, "create_default_model_catalog", lambda: catalog)
+
+    required = QwenMultiSkillPromptGenerator.INPUT_TYPES()["required"]
+
+    assert required["backend"][0] == ["本地模型", "在线 API"]
+    assert required["local_model"][0] == [NO_LOCAL_MODEL, "GGUF｜qwen/model.gguf"]
+    assert required["local_mmproj"][0] == [NO_MMPROJ, "mmproj｜qwen/mmproj.gguf"]
+
+
+def test_local_mode_dispatches_gguf_with_separate_mmproj(tmp_path):
+    model = (tmp_path / "model.gguf").resolve()
+    mmproj = (tmp_path / "mmproj.gguf").resolve()
+    catalog = FakeCatalog(
+        [LocalModelEntry("GGUF｜model.gguf", "gguf", model)],
+        [LocalModelEntry("mmproj｜mmproj.gguf", "gguf", mmproj)],
+    )
+    node, _, backend, registry = make_node("ok", catalog)
+
+    node.generate(
+        **settings(
+            backend="本地模型",
+            local_model="GGUF｜model.gguf",
+            local_mmproj="mmproj｜mmproj.gguf",
+        )
+    )
+
+    assert registry.names == ["gguf"]
+    _, config = backend.requests[-1]
+    assert config["model_path"] == str(model)
+    assert config["mmproj_path"] == str(mmproj)
+
+
+def test_local_mode_dispatches_transformers_and_ignores_mmproj(tmp_path):
+    model = (tmp_path / "Qwen-VL").resolve()
+    catalog = FakeCatalog(
+        [LocalModelEntry("Transformers｜Qwen-VL", "transformers", model)]
+    )
+    node, _, backend, registry = make_node("ok", catalog)
+
+    node.generate(
+        **settings(
+            backend="本地模型",
+            local_model="Transformers｜Qwen-VL",
+            local_mmproj=NO_MMPROJ,
+        )
+    )
+
+    assert registry.names == ["transformers"]
+    _, config = backend.requests[-1]
+    assert config["model"] == str(model)
+
+
+def test_chinese_online_api_mode_dispatches_openai_compatible_backend():
+    node, _, backend, registry = make_node("ok")
+
+    node.generate(**settings(backend="在线 API"))
+
+    assert registry.names == ["online_api"]
+    _, config = backend.requests[-1]
+    assert config["base_url"] == "https://example.com/v1"
 
 
 @pytest.mark.parametrize("bad_task", ["", "   ", None])
