@@ -5,6 +5,7 @@ import {
     WIDGET_LABELS,
     isWidgetVisible,
     normalizeMode,
+    setCbkkNodeSource,
 } from "./qwen_skill_prompt_ui.mjs";
 
 const NODE_NAME = "QwenMultiSkillPromptGenerator";
@@ -273,6 +274,9 @@ function installSkillPicker(node, widget) {
 
 app.registerExtension({
     name: "cbkk.qwen_multi_skill_prompt.zh_cn",
+    addCustomNodeDefs(defs) {
+        setCbkkNodeSource(defs);
+    },
     async beforeRegisterNodeDef(nodeType, nodeData) {
         if (nodeData.name !== NODE_NAME) return;
         const original = nodeType.prototype.onNodeCreated;

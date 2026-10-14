@@ -1,5 +1,20 @@
 export const MODE_LOCAL = "local";
 export const MODE_API = "api";
+export const CBKK_NODE_NAMES = Object.freeze([
+    "Qwen21ResolutionResize",
+    "QwenMultiSkillPromptGenerator",
+]);
+
+export function setCbkkNodeSource(defs) {
+    if (!defs || typeof defs !== "object") return defs;
+    for (const nodeName of CBKK_NODE_NAMES) {
+        const definition = defs[nodeName];
+        if (definition && typeof definition === "object") {
+            definition.python_module = "custom_nodes.cbkk";
+        }
+    }
+    return defs;
+}
 export const VISIBLE_BACKEND_CHOICES = Object.freeze(["本地模型", "在线 API"]);
 
 export const WIDGET_LABELS = Object.freeze({

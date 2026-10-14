@@ -8,7 +8,30 @@ import {
     isWidgetVisible,
     modelKind,
     normalizeMode,
+    setCbkkNodeSource,
 } from "../web/js/qwen_skill_prompt_ui.mjs";
+
+
+test("rewrites only cbkk node source badges", () => {
+    const defs = {
+        Qwen21ResolutionResize: {
+            python_module: "custom_nodes.ComfyUI-Qwen21-Resolution",
+        },
+        QwenMultiSkillPromptGenerator: {
+            python_module: "custom_nodes.ComfyUI-Qwen21-Resolution",
+        },
+        OtherNode: { python_module: "custom_nodes.other" },
+    };
+
+    setCbkkNodeSource(defs);
+
+    assert.equal(defs.Qwen21ResolutionResize.python_module, "custom_nodes.cbkk");
+    assert.equal(
+        defs.QwenMultiSkillPromptGenerator.python_module,
+        "custom_nodes.cbkk",
+    );
+    assert.equal(defs.OtherNode.python_module, "custom_nodes.other");
+});
 
 
 test("normalizes Chinese and legacy backend values to two UI modes", () => {
