@@ -1,7 +1,8 @@
 # ComfyUI cbkk 节点
 
-本插件提供两个 `cbkk` 分类的 ComfyUI 节点：
+本插件提供三个 `cbkk` 分类的 ComfyUI 节点：
 
+- `cbkk｜Skill 知识库加载器`：独立加载或自定义 Skill 知识库规则，支持下拉选择本地文件、手动输入规则及链式多节点串联。
 - `cbkk｜Skill 提示词生成器`：按顺序联合多个 Skill，支持本地模型或 OpenAI/NewAPI 兼容接口，可连接 0–5 张参考图。
 - `cbkk｜Qwen 2.1 分辨率自动匹配`：按输入图片宽高比选择 Qwen 2.1 推荐分辨率。
 

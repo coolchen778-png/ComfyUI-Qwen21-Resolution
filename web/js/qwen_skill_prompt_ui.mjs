@@ -3,6 +3,7 @@ export const MODE_API = "api";
 export const CBKK_NODE_NAMES = Object.freeze([
     "Qwen21ResolutionResize",
     "QwenMultiSkillPromptGenerator",
+    "QwenSkillLoader",
 ]);
 
 export function setCbkkNodeSource(defs) {

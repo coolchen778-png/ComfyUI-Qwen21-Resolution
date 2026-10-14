@@ -118,19 +118,26 @@ class QwenMultiSkillPromptGenerator:
     FUNCTION = "generate"
     CATEGORY = "cbkk"
 
-    @staticmethod
-    def _parse_skill_ids(value: str) -> list[str]:
-        try:
-            parsed = json.loads(value)
-        except (TypeError, json.JSONDecodeError) as exc:
-            raise SkillPromptError("Skill 读取", "Skill 选择必须是 JSON 数组") from exc
-        if not isinstance(parsed, list) or not parsed:
-            raise SkillPromptError("Skill 读取", "至少选择一个 Skill")
-        if not all(isinstance(item, str) and item for item in parsed):
-            raise SkillPromptError("Skill 读取", "Skill ID 必须是非空字符串")
-        if len(set(parsed)) != len(parsed):
-            raise SkillPromptError("Skill 读取", "Skill 选择中不能有重复 ID")
-        return parsed
+    def _resolve_skills_text(self, skills: Any) -> str:
+        if not skills:
+            return ""
+        if isinstance(skills, str):
+            val = skills.strip()
+            if not val or val in ("[]", "{}"):
+                return ""
+            try:
+                parsed = json.loads(val)
+                if isinstance(parsed, list):
+                    if not parsed:
+                        return ""
+                    return self.skill_manager.combine([str(item) for item in parsed if str(item).strip()])
+            except Exception:
+                pass
+            return val
+        if isinstance(skills, (list, tuple)):
+            clean_list = [str(item).strip() for item in skills if str(item).strip()]
+            return self.skill_manager.combine(clean_list) if clean_list else ""
+        return str(skills).strip()
 
     @staticmethod
     def _backend_config(backend: str, values: dict[str, Any]) -> dict[str, Any]:
@@ -242,13 +249,13 @@ class QwenMultiSkillPromptGenerator:
         ]
         if unexpected_images:
             raise SkillPromptError("图片转换", "最多支持 5 张参考图")
-        skill_ids = self._parse_skill_ids(skills)
-        combined_skills = self.skill_manager.combine(skill_ids)
+        combined_skills = self._resolve_skills_text(skills)
         images = prepare_images((image_1, image_2, image_3, image_4, image_5))
         system_prompt = role_prompt.strip()
-        if system_prompt:
-            system_prompt += "\n\n"
-        system_prompt += "请严格参考并联合执行以下 Skill：\n\n" + combined_skills
+        if combined_skills:
+            if system_prompt:
+                system_prompt += "\n\n"
+            system_prompt += "请严格参考并联合执行以下 Skill：\n\n" + combined_skills
         request = PromptRequest(
             system_prompt=system_prompt,
             task=task.strip(),
@@ -272,3 +279,60 @@ class QwenMultiSkillPromptGenerator:
         finally:
             if unload_after_generate:
                 adapter.unload(config)
+
+
+class QwenSkillLoader:
+    """
+    cbkk｜Skill 知识库加载器
+    独立加载或编写 Skill 知识库规则，支持从下拉列表选择已有 Skill、手动补充自定义规则，并支持多节点串联输入。
+    """
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        manager = create_default_skill_manager()
+        skills = ["none (不使用/仅自定义)"]
+        try:
+            skills += [entry.id for entry in manager.list_skills()]
+        except Exception:
+            pass
+        return {
+            "required": {
+                "skill_name": (skills, {"default": skills[0]}),
+                "custom_skill_text": (
+                    "STRING",
+                    {
+                        "default": "",
+                        "multiline": True,
+                        "placeholder": "在此输入或粘贴自定义 Skill 规则（可选，将与选中的 Skill 合并）",
+                    },
+                ),
+            },
+            "optional": {
+                "prev_skills": ("STRING", {"forceInput": True}),
+            },
+        }
+
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("skills",)
+    FUNCTION = "load_skill"
+    CATEGORY = "cbkk"
+
+    def load_skill(self, skill_name: str, custom_skill_text: str = "", prev_skills: str = ""):
+        parts = []
+        if prev_skills and prev_skills.strip():
+            parts.append(prev_skills.strip())
+
+        if skill_name and skill_name != "none (不使用/仅自定义)":
+            manager = create_default_skill_manager()
+            try:
+                skill_content = manager.combine([skill_name])
+                if skill_content.strip():
+                    parts.append(skill_content.strip())
+            except Exception as e:
+                parts.append(f'<skill name="{skill_name}">\n# 读取失败: {e}\n</skill>')
+
+        if custom_skill_text and custom_skill_text.strip():
+            parts.append(f'<skill name="custom_skill">\n{custom_skill_text.strip()}\n</skill>')
+
+        return ("\n\n".join(parts),)
+
