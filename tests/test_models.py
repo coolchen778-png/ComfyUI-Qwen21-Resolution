@@ -70,6 +70,22 @@ def test_unknown_or_stale_selection_is_rejected(tmp_path):
         catalog.resolve_mmproj("mmproj｜missing.gguf")
 
 
+def test_discovery_ignores_symlinked_model_outside_llm_root(tmp_path):
+    root = tmp_path / "llm"
+    outside = tmp_path / "outside.gguf"
+    link = root / "linked.gguf"
+    root.mkdir()
+    outside.write_bytes(b"outside")
+    try:
+        link.symlink_to(outside)
+    except OSError as exc:
+        pytest.skip(f"symlinks are unavailable: {exc}")
+
+    catalog = LocalModelCatalog.discover([root])
+
+    assert catalog.main_choices() == [NO_LOCAL_MODEL]
+
+
 def test_get_llm_roots_registers_models_llm_and_keeps_extra_roots(tmp_path):
     default = tmp_path / "models" / "llm"
     extra = tmp_path / "external-llm"

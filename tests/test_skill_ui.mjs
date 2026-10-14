@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
     MODE_API,
     MODE_LOCAL,
+    VISIBLE_BACKEND_CHOICES,
     isWidgetVisible,
     modelKind,
     normalizeMode,
@@ -11,6 +12,7 @@ import {
 
 
 test("normalizes Chinese and legacy backend values to two UI modes", () => {
+    assert.deepEqual(VISIBLE_BACKEND_CHOICES, ["本地模型", "在线 API"]);
     assert.equal(normalizeMode("本地模型"), MODE_LOCAL);
     assert.equal(normalizeMode("gguf"), MODE_LOCAL);
     assert.equal(normalizeMode("transformers"), MODE_LOCAL);

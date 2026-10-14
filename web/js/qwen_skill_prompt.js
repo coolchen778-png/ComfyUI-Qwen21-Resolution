@@ -1,6 +1,7 @@
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
 import {
+    VISIBLE_BACKEND_CHOICES,
     WIDGET_LABELS,
     isWidgetVisible,
     normalizeMode,
@@ -281,6 +282,9 @@ app.registerExtension({
             const skills = this.widgets?.find((widget) => widget.name === "skills");
             const backend = this.widgets?.find((widget) => widget.name === "backend");
             const localModel = this.widgets?.find((widget) => widget.name === "local_model");
+            if (backend?.options) {
+                backend.options.values = [...VISIBLE_BACKEND_CHOICES];
+            }
             if (skills) installSkillPicker(this, skills);
             for (const widget of [backend, localModel]) {
                 if (!widget) continue;

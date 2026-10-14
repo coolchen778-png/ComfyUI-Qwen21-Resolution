@@ -1,5 +1,6 @@
 export const MODE_LOCAL = "local";
 export const MODE_API = "api";
+export const VISIBLE_BACKEND_CHOICES = Object.freeze(["本地模型", "在线 API"]);
 
 export const WIDGET_LABELS = Object.freeze({
     task: "任务描述",

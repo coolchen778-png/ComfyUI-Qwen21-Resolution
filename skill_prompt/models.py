@@ -48,8 +48,13 @@ class LocalModelCatalog:
             backend: str,
             path: Path,
             relative: Path,
+            root: Path,
         ) -> None:
             resolved = path.resolve()
+            try:
+                resolved.relative_to(root)
+            except ValueError:
+                return
             if resolved in seen_paths:
                 return
             seen_paths.add(resolved)
@@ -72,9 +77,9 @@ class LocalModelCatalog:
             for path in gguf_files:
                 relative = path.relative_to(root)
                 if "mmproj" in path.stem.casefold():
-                    append_entry(mmproj_entries, "mmproj", "gguf", path, relative)
+                    append_entry(mmproj_entries, "mmproj", "gguf", path, relative, root)
                 else:
-                    append_entry(main_entries, "GGUF", "gguf", path, relative)
+                    append_entry(main_entries, "GGUF", "gguf", path, relative, root)
 
             transformer_dirs = sorted(
                 {path.parent for path in root.rglob("config.json") if path.is_file()},
@@ -87,6 +92,7 @@ class LocalModelCatalog:
                     "transformers",
                     path,
                     path.relative_to(root),
+                    root,
                 )
 
         main_entries.sort(key=lambda entry: (entry.backend != "gguf", entry.selection.casefold()))

@@ -159,9 +159,24 @@ def test_input_types_offer_two_chinese_modes_and_scanned_model_choices(monkeypat
 
     required = QwenMultiSkillPromptGenerator.INPUT_TYPES()["required"]
 
-    assert required["backend"][0] == ["本地模型", "在线 API"]
+    assert required["backend"][0][:2] == ["本地模型", "在线 API"]
+    assert {"gguf", "transformers", "online_api"}.issubset(required["backend"][0])
     assert required["local_model"][0] == [NO_LOCAL_MODEL, "GGUF｜qwen/model.gguf"]
     assert required["local_mmproj"][0] == [NO_MMPROJ, "mmproj｜qwen/mmproj.gguf"]
+
+
+def test_new_model_selectors_are_appended_after_legacy_widgets(monkeypatch):
+    import skill_prompt.node as node_module
+
+    monkeypatch.setattr(
+        node_module, "create_default_model_catalog", lambda: FakeCatalog()
+    )
+
+    names = list(QwenMultiSkillPromptGenerator.INPUT_TYPES()["required"])
+
+    assert names[-2:] == ["local_model", "local_mmproj"]
+    assert names.index("role_prompt") == 3
+    assert names.index("api_max_image_side") == len(names) - 3
 
 
 def test_local_mode_dispatches_gguf_with_separate_mmproj(tmp_path):

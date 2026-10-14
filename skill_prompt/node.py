@@ -68,9 +68,9 @@ class QwenMultiSkillPromptGenerator:
                     {"default": "", "multiline": True, "placeholder": "描述要生成的图像提示词"},
                 ),
                 "skills": ("STRING", {"default": "[]", "multiline": True}),
-                "backend": (["本地模型", "在线 API"],),
-                "local_model": (catalog.main_choices(), {"default": NO_LOCAL_MODEL}),
-                "local_mmproj": (catalog.mmproj_choices(), {"default": NO_MMPROJ}),
+                "backend": (
+                    ["本地模型", "在线 API", "gguf", "transformers", "online_api"],
+                ),
                 "role_prompt": (
                     "STRING",
                     {
@@ -105,6 +105,8 @@ class QwenMultiSkillPromptGenerator:
                 "api_custom_headers": ("STRING", {"default": "{}", "multiline": True}),
                 "api_timeout": ("FLOAT", {"default": 120.0, "min": 0.1, "max": 3600.0}),
                 "api_max_image_side": ("INT", {"default": 2048, "min": 0, "max": 16384}),
+                "local_model": (catalog.main_choices(), {"default": NO_LOCAL_MODEL}),
+                "local_mmproj": (catalog.mmproj_choices(), {"default": NO_MMPROJ}),
             },
             "optional": {
                 f"image_{index}": ("IMAGE",) for index in range(1, 6)
