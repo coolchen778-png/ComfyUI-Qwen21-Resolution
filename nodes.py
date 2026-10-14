@@ -118,6 +118,6 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "Qwen21ResolutionResize": "Qwen 2.1 官方分辨率自动匹配缩放",
-    "QwenMultiSkillPromptGenerator": "Qwen 多 Skill 提示词生成器",
+    "Qwen21ResolutionResize": "cbkk｜Qwen 2.1 分辨率自动匹配",
+    "QwenMultiSkillPromptGenerator": "cbkk｜Skill 提示词生成器",
 }
