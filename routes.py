@@ -63,6 +63,20 @@ async def upload_skill_handler(request):
         return _json_response({"error": "Skill 上传失败"}, status=500)
 
 
+async def delete_skill_handler(request):
+    try:
+        data = await request.json()
+        skill_id = data.get("id")
+        if not skill_id or not isinstance(skill_id, str):
+            return _json_response({"error": "缺少 skill id 参数"}, status=400)
+        create_default_skill_manager().delete_skill(skill_id)
+        return _json_response({"success": True, "id": skill_id})
+    except SkillPromptError as exc:
+        return _json_response({"error": str(exc)}, status=400)
+    except Exception as exc:
+        return _json_response({"error": f"Skill 删除失败: {exc}"}, status=500)
+
+
 def register_routes(prompt_server=None) -> bool:
     if prompt_server is None:
         try:
@@ -79,5 +93,7 @@ def register_routes(prompt_server=None) -> bool:
         return True
     route_table.get("/qwen_skill_prompt/skills")(list_skills_handler)
     route_table.post("/qwen_skill_prompt/upload")(upload_skill_handler)
+    route_table.post("/qwen_skill_prompt/delete")(delete_skill_handler)
+    route_table.delete("/qwen_skill_prompt/skills")(delete_skill_handler)
     _registered_server_ids.add(server_id)
     return True

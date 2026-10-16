@@ -168,3 +168,30 @@ def test_save_upload_requires_user_root(tmp_path):
 
     with pytest.raises(SkillPromptError, match="用户 Skill 目录"):
         manager.save_upload("new.md", b"x")
+
+
+def test_delete_user_skill_success(tmp_path):
+    manager, _, user = _manager(tmp_path)
+    file_path = user / "custom.md"
+    file_path.write_text("content", encoding="utf-8")
+    assert file_path.exists()
+
+    manager.delete_skill("user:custom.md")
+    assert not file_path.exists()
+
+
+def test_delete_builtin_skill_rejected(tmp_path):
+    manager, builtin, _ = _manager(tmp_path)
+    file_path = builtin / "builtin_rule.md"
+    file_path.write_text("content", encoding="utf-8")
+
+    with pytest.raises(SkillPromptError, match="只能删除用户上传的 Skill"):
+        manager.delete_skill("builtin:builtin_rule.md")
+
+    assert file_path.exists()
+
+
+def test_delete_nonexistent_skill_raises(tmp_path):
+    manager, _, _ = _manager(tmp_path)
+    with pytest.raises(SkillPromptError):
+        manager.delete_skill("user:nonexistent.md")

@@ -1,5 +1,5 @@
-import { app } from "../../../scripts/app.js";
-import { api } from "../../../scripts/api.js";
+import { app } from "../../scripts/app.js";
+import { api } from "../../scripts/api.js";
 import {
     VISIBLE_BACKEND_CHOICES,
     WIDGET_LABELS,
@@ -75,6 +75,7 @@ function makeButton(label, title, primary = false) {
     button.type = "button";
     button.textContent = label;
     button.title = title || "";
+    button.draggable = false;
     button.style.cssText = [
         "padding:6px 10px",
         "border:1px solid #58736a",
@@ -83,7 +84,10 @@ function makeButton(label, title, primary = false) {
         "color:#f2f5f4",
         "cursor:pointer",
         "font-weight:600",
+        "user-select:none",
     ].join(";");
+    button.addEventListener("pointerdown", (e) => e.stopPropagation());
+    button.addEventListener("mousedown", (e) => e.stopPropagation());
     return button;
 }
 
@@ -100,6 +104,17 @@ async function uploadSkill(file) {
     const response = await api.fetchApi("/qwen_skill_prompt/upload", {
         method: "POST",
         body: form,
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+    return payload;
+}
+
+async function deleteSkill(skillId) {
+    const response = await api.fetchApi("/qwen_skill_prompt/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: skillId }),
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || `HTTP ${response.status}`);
@@ -215,6 +230,8 @@ function installSkillPicker(node, widget) {
     search.type = "search";
     search.placeholder = "搜索 Skill…";
     search.style.cssText = "flex:1;min-width:120px;background:#151918;color:#eee;border:1px solid #4a5551;border-radius:4px;padding:6px";
+    search.addEventListener("pointerdown", (e) => e.stopPropagation());
+    search.addEventListener("mousedown", (e) => e.stopPropagation());
 
     const refreshBtn = makeButton("↻ 刷新", "重新扫描 Skill 目录");
     const uploadBtn = makeButton("⬆ 上传 Skill", "上传 UTF-8 编码的 .md 或 .txt 文件", true);
@@ -231,10 +248,6 @@ function installSkillPicker(node, widget) {
         [choices, "可选 Skill（点击添加）"],
         [chosen, "已选 Skill（拖拽排序）"],
     ]) {
-        const label = document.createElement("div");
-        label.textContent = title;
-        label.style.cssText = "font-weight:700;margin-bottom:5px;color:#bcd2ca";
-        element.append(label);
         element.style.cssText = "overflow:auto;max-height:230px;padding:6px;border:1px solid #3f4945;border-radius:4px;background:#171b1a";
     }
     columns.append(choices, chosen);
@@ -250,15 +263,37 @@ function installSkillPicker(node, widget) {
         choices.replaceChildren();
         chosen.replaceChildren();
 
-        const choicesTitle = document.createElement("div");
+        const choicesHeader = document.createElement("div");
+        choicesHeader.style.cssText = "display:flex;justify-content:space-between;align-items:center;margin-bottom:6px";
+        const choicesTitle = document.createElement("span");
         choicesTitle.textContent = "可选 Skill（点击添加）";
-        choicesTitle.style.cssText = "font-weight:700;margin-bottom:5px;color:#bcd2ca";
-        choices.append(choicesTitle);
+        choicesTitle.style.cssText = "font-weight:700;color:#bcd2ca";
+        choicesHeader.append(choicesTitle);
+        choices.append(choicesHeader);
 
-        const chosenTitle = document.createElement("div");
-        chosenTitle.textContent = "已选 Skill（拖拽排序）";
-        chosenTitle.style.cssText = "font-weight:700;margin-bottom:5px;color:#bcd2ca";
-        chosen.append(chosenTitle);
+        const chosenHeader = document.createElement("div");
+        chosenHeader.style.cssText = "display:flex;justify-content:space-between;align-items:center;margin-bottom:6px";
+        const chosenTitle = document.createElement("span");
+        chosenTitle.textContent = `已选 Skill (${selected.length})`;
+        chosenTitle.style.cssText = "font-weight:700;color:#bcd2ca";
+
+        const clearBtn = document.createElement("button");
+        clearBtn.type = "button";
+        clearBtn.textContent = "清空全部";
+        clearBtn.title = "清空当前节点中已选的所有 Skill";
+        clearBtn.draggable = false;
+        clearBtn.style.cssText = "padding:2px 7px;font-size:11px;background:#4a2b2b;color:#ffcccc;border:1px solid #663d3d;border-radius:3px;cursor:pointer";
+        clearBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
+        clearBtn.addEventListener("mousedown", (e) => e.stopPropagation());
+        clearBtn.onclick = (e) => {
+            e.stopPropagation();
+            if (selected.length === 0) return;
+            selected = [];
+            commit();
+            render();
+        };
+        chosenHeader.append(chosenTitle, clearBtn);
+        chosen.append(chosenHeader);
 
         const query = search.value.trim().toLocaleLowerCase();
         for (const entry of available) {
@@ -268,43 +303,115 @@ function installSkillPicker(node, widget) {
             ) {
                 continue;
             }
-            const button = makeButton(
-                `${entry.source === "user" ? "用户" : "内置"}：${entry.relative_path}`,
-                `添加 ${entry.id}`,
+            const itemRow = document.createElement("div");
+            itemRow.style.cssText = "display:flex;align-items:center;gap:4px;margin-bottom:4px";
+
+            const addBtn = makeButton(
+                `+ ${entry.source === "user" ? "用户" : "内置"}：${entry.relative_path}`,
+                `添加 ${entry.id} 到节点`,
             );
-            button.style.display = "block";
-            button.style.width = "100%";
-            button.style.marginBottom = "4px";
-            button.onclick = () => {
-                selected.push(entry.id);
-                commit();
-                render();
+            addBtn.style.flex = "1";
+            addBtn.style.textAlign = "left";
+            addBtn.style.overflow = "hidden";
+            addBtn.style.textOverflow = "ellipsis";
+            addBtn.style.whiteSpace = "nowrap";
+            addBtn.onclick = (e) => {
+                e.stopPropagation();
+                if (!selected.includes(entry.id)) {
+                    selected.push(entry.id);
+                    commit();
+                    render();
+                }
             };
-            choices.append(button);
+            itemRow.append(addBtn);
+
+            if (entry.source === "user") {
+                const delBtn = document.createElement("button");
+                delBtn.type = "button";
+                delBtn.textContent = "🗑️";
+                delBtn.title = `从磁盘永久删除用户 Skill: ${entry.relative_path}`;
+                delBtn.draggable = false;
+                delBtn.style.cssText = "padding:4px 6px;background:#442222;color:#ff9999;border:1px solid #663333;border-radius:4px;cursor:pointer;flex-shrink:0";
+                delBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
+                delBtn.addEventListener("mousedown", (e) => e.stopPropagation());
+                delBtn.onclick = async (e) => {
+                    e.stopPropagation();
+                    if (!confirm(`确定要彻底删除用户 Skill 文件 "${entry.relative_path}" 吗？此操作无法撤销。`)) {
+                        return;
+                    }
+                    try {
+                        if (status) status.textContent = `正在删除 ${entry.relative_path}…`;
+                        await deleteSkill(entry.id);
+                        const selIdx = selected.indexOf(entry.id);
+                        if (selIdx !== -1) {
+                            selected.splice(selIdx, 1);
+                        }
+                        await load();
+                        if (status) status.textContent = `已成功删除 Skill: ${entry.relative_path}`;
+                    } catch (err) {
+                        const msg = `删除失败: ${err.message}`;
+                        if (status) status.textContent = msg;
+                        alert(msg);
+                    }
+                };
+                itemRow.append(delBtn);
+            }
+            choices.append(itemRow);
         }
 
         selected.forEach((id, index) => {
             const row = document.createElement("div");
-            row.draggable = true;
-            row.style.cssText = "display:flex;align-items:center;gap:5px;margin-bottom:4px;padding:4px;background:#29322f;border-radius:4px;cursor:grab";
+            row.style.cssText = "display:flex;align-items:center;gap:6px;margin-bottom:4px;padding:4px 6px;background:#29322f;border-radius:4px;border:1px solid #3c4944";
 
             const handle = document.createElement("span");
             handle.textContent = "☰";
+            handle.title = "按住拖拽排序";
+            handle.draggable = true;
+            handle.style.cssText = "cursor:grab;user-select:none;padding:0 3px;color:#8ba59b;font-weight:bold";
 
             const label = document.createElement("span");
             label.textContent = `${index + 1}. ${labelFor(id)}`;
-            label.style.flex = "1";
+            label.title = `${id} (双击可快速移除)`;
+            label.style.cssText = "flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;user-select:none;cursor:pointer";
 
-            const remove = makeButton("×", `移除 ${id}`);
-            remove.onclick = () => {
-                selected.splice(index, 1);
+            const remove = document.createElement("button");
+            remove.type = "button";
+            remove.textContent = "× 移除";
+            remove.title = `从节点中移除: ${id}`;
+            remove.draggable = false;
+            remove.style.cssText = "padding:3px 8px;border:1px solid #853e3e;border-radius:4px;background:#5e2a2a;color:#ffdede;cursor:pointer;font-size:11px;font-weight:600;user-select:none;white-space:nowrap;flex-shrink:0";
+            remove.addEventListener("pointerdown", (e) => e.stopPropagation());
+            remove.addEventListener("mousedown", (e) => e.stopPropagation());
+            remove.onclick = (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                const targetIdx = selected.indexOf(id);
+                if (targetIdx !== -1) {
+                    selected.splice(targetIdx, 1);
+                }
                 commit();
                 render();
             };
 
-            row.ondragstart = (event) =>
+            row.ondblclick = (e) => {
+                e.stopPropagation();
+                const targetIdx = selected.indexOf(id);
+                if (targetIdx !== -1) {
+                    selected.splice(targetIdx, 1);
+                }
+                commit();
+                render();
+            };
+
+            row.draggable = true;
+            row.ondragstart = (event) => {
                 event.dataTransfer.setData("text/plain", String(index));
-            row.ondragover = (event) => event.preventDefault();
+                event.dataTransfer.effectAllowed = "move";
+            };
+            row.ondragover = (event) => {
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "move";
+            };
             row.ondrop = (event) => {
                 event.preventDefault();
                 const from = Number(event.dataTransfer.getData("text/plain"));
@@ -319,7 +426,7 @@ function installSkillPicker(node, widget) {
             chosen.append(row);
         });
 
-        status.textContent = `已选择 ${selected.length} 个 Skill`;
+        status.textContent = `已选择 ${selected.length} 个 Skill（双击或点击「× 移除」删除）`;
     };
 
     search.oninput = render;

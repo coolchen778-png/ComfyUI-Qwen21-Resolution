@@ -110,3 +110,13 @@ class SkillManager:
             raise SkillPromptError("Skill 读取", f"无法保存 Skill {filename}: {exc}") from exc
 
         return SkillEntry(f"user:{filename}", "user", filename)
+
+    def delete_skill(self, skill_id: str) -> None:
+        source, relative, path = self._resolve_id(skill_id)
+        if source != "user":
+            raise SkillPromptError("Skill 删除", "只能删除用户上传的 Skill，内置 Skill 不可删除")
+        try:
+            if path.is_file():
+                path.unlink()
+        except OSError as exc:
+            raise SkillPromptError("Skill 删除", f"无法删除 Skill {skill_id}: {exc}") from exc
