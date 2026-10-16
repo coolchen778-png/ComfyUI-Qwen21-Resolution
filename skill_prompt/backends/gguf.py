@@ -199,6 +199,19 @@ class GGUFBackend:
         except Exception as exc:
             raise SkillPromptError("模型加载", f"无法加载 GGUF 模型: {exc}") from exc
 
+    @staticmethod
+    def _reset_model_state(model: Any) -> None:
+        try:
+            if hasattr(model, "_hybrid_cache_mgr") and model._hybrid_cache_mgr is not None:
+                model._hybrid_cache_mgr.clear()
+            if hasattr(model, "_ctx") and hasattr(model._ctx, "memory_clear"):
+                model._ctx.memory_clear(True)
+            if hasattr(model, "reset"):
+                model.reset()
+            model.n_tokens = 0
+        except Exception:
+            pass
+
     def generate(self, request: PromptRequest, config: Mapping[str, Any]) -> str:
         self.validate(config, has_images=bool(request.images))
         key = self.cache_key(config)
@@ -211,7 +224,10 @@ class GGUFBackend:
                 "模型加载",
                 f"图片输入需要可用视觉 handler；当前已发现: {available}",
             )
-        estimated = estimate_text_tokens(request.system_prompt, request.task)
+        estimated = (
+            estimate_text_tokens(request.system_prompt, request.task)
+            + len(request.images) * 1024
+        )
         if estimated + request.max_new_tokens > config["n_ctx"]:
             raise SkillPromptError(
                 "生成",
@@ -222,6 +238,7 @@ class GGUFBackend:
         )
         with self._cache.generation_lock(key):
             try:
+                self._reset_model_state(model)
                 payload = model.create_chat_completion(
                     messages=messages,
                     max_tokens=request.max_new_tokens,
@@ -233,6 +250,8 @@ class GGUFBackend:
                 raise
             except Exception as exc:
                 raise SkillPromptError("生成", f"GGUF 推理失败: {exc}") from exc
+            finally:
+                self._reset_model_state(model)
 
     def unload(self, config: Mapping[str, Any]) -> None:
         key = self.cache_key(config)
@@ -240,6 +259,7 @@ class GGUFBackend:
         def close(bundle: tuple[Any, Any, Any]) -> None:
             _, model, _ = bundle
             try:
+                self._reset_model_state(model)
                 if hasattr(model, "close"):
                     model.close()
             finally:
