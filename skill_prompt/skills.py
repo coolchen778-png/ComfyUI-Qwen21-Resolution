@@ -74,7 +74,9 @@ class SkillManager:
             raise SkillPromptError("Skill 读取", f"Skill 不存在或越界: {skill_id!r}")
         return source, posix_path.as_posix(), path
 
-    def save_upload(self, filename: str, content: bytes) -> SkillEntry:
+    def save_upload(
+        self, filename: str, content: bytes, overwrite: bool = False
+    ) -> SkillEntry:
         user_root = self._roots.get("user")
         if user_root is None:
             raise SkillPromptError("Skill 读取", "未配置用户 Skill 目录")
@@ -100,7 +102,8 @@ class SkillManager:
             target = (resolved_root / filename).resolve()
             if not target.is_relative_to(resolved_root):
                 raise SkillPromptError("Skill 读取", f"上传路径越界: {filename!r}")
-            with target.open("xb") as handle:
+            mode = "wb" if overwrite else "xb"
+            with target.open(mode) as handle:
                 handle.write(content)
         except FileExistsError as exc:
             raise SkillPromptError("Skill 读取", f"Skill 已存在: {filename}") from exc

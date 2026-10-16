@@ -163,6 +163,15 @@ def test_save_upload_refuses_to_overwrite_existing_file(tmp_path):
     assert (user / "same.md").read_text(encoding="utf-8") == "old"
 
 
+def test_save_upload_allows_overwrite_when_requested(tmp_path):
+    manager, _, user = _manager(tmp_path)
+    (user / "same.md").write_text("old", encoding="utf-8")
+
+    entry = manager.save_upload("same.md", b"new", overwrite=True)
+    assert entry.id == "user:same.md"
+    assert (user / "same.md").read_text(encoding="utf-8") == "new"
+
+
 def test_save_upload_requires_user_root(tmp_path):
     manager = SkillManager([SkillRoot("builtin", tmp_path / "builtin")])
 

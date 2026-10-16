@@ -31,15 +31,26 @@ async def list_skills_handler(request):
 
 async def upload_skill_handler(request):
     try:
+        overwrite = False
+        query = getattr(request, "query", {})
+        if query and query.get("overwrite", "").lower() in ("true", "1", "yes"):
+            overwrite = True
+
         reader = await request.multipart()
         file_field = None
         while True:
             field = await reader.next()
             if field is None:
                 break
-            if getattr(field, "name", None) == "file":
+            name = getattr(field, "name", None)
+            if name == "file":
                 file_field = field
                 break
+            elif name == "overwrite":
+                val = await field.read()
+                if val.decode("utf-8").strip().lower() in ("true", "1", "yes"):
+                    overwrite = True
+
         if file_field is None or not getattr(file_field, "filename", None):
             return _json_response({"error": "缺少 multipart file 字段"}, status=400)
 
@@ -54,7 +65,7 @@ async def upload_skill_handler(request):
                     {"error": "Skill 文件不能超过 1 MiB"}, status=413
                 )
         entry = create_default_skill_manager().save_upload(
-            file_field.filename, bytes(content)
+            file_field.filename, bytes(content), overwrite=overwrite
         )
         return _json_response(asdict(entry), status=201)
     except SkillPromptError as exc:

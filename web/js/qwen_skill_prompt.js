@@ -98,10 +98,13 @@ async function fetchSkills() {
     return payload.skills || [];
 }
 
-async function uploadSkill(file) {
+async function uploadSkill(file, overwrite = false) {
     const form = new FormData();
     form.append("file", file, file.name);
-    const response = await api.fetchApi("/qwen_skill_prompt/upload", {
+    const url = overwrite
+        ? "/qwen_skill_prompt/upload?overwrite=true"
+        : "/qwen_skill_prompt/upload";
+    const response = await api.fetchApi(url, {
         method: "POST",
         body: form,
     });
@@ -175,12 +178,32 @@ function installSkillPicker(node, widget) {
         fileInput.onchange = async () => {
             const file = fileInput.files?.[0];
             if (!file) return;
+
+            let overwrite = false;
+            const existing = available.find(
+                (entry) =>
+                    entry.source === "user" &&
+                    entry.relative_path.toLowerCase() === file.name.toLowerCase()
+            );
+            if (existing) {
+                if (
+                    !confirm(
+                        `Skill "${file.name}" 已经存在。\n\n点击【确定】将覆盖更新为新文件的内容；\n点击【取消】将放弃本次上传。`
+                    )
+                ) {
+                    fileInput.value = "";
+                    return;
+                }
+                overwrite = true;
+            }
+
             if (status) status.textContent = `正在上传 ${file.name}…`;
             try {
-                const entry = await uploadSkill(file);
+                const entry = await uploadSkill(file, overwrite);
                 if (!selected.includes(entry.id)) selected.push(entry.id);
                 await load();
-                if (status) status.textContent = `上传成功并已加入已选：${entry.id}`;
+                if (status)
+                    status.textContent = `${overwrite ? "覆盖更新成功" : "上传成功"}并已加入已选：${entry.id}`;
             } catch (error) {
                 const msg = `Skill 上传失败：${error.message}`;
                 if (status) status.textContent = msg;

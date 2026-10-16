@@ -22,10 +22,10 @@ class FakeManager:
             SkillEntry("user:nested/b.txt", "user", "nested/b.txt"),
         ]
 
-    def save_upload(self, filename, content):
+    def save_upload(self, filename, content, overwrite=False):
         if self.save_error:
             raise self.save_error
-        self.saved.append((filename, content))
+        self.saved.append((filename, content, overwrite))
         return SkillEntry(f"user:{filename}", "user", filename)
 
     def delete_skill(self, skill_id):
@@ -53,9 +53,10 @@ class FakeReader:
 
 
 class FakeRequest:
-    def __init__(self, fields=(), json_data=None):
+    def __init__(self, fields=(), json_data=None, query=None):
         self.fields = fields
         self.json_data = json_data or {}
+        self.query = query or {}
 
     async def multipart(self):
         return FakeReader(self.fields)
@@ -101,7 +102,19 @@ def test_upload_route_returns_201(monkeypatch):
         "source": "user",
         "relative_path": "new.md",
     }
-    assert manager.saved == [("new.md", b"abcdef")]
+    assert manager.saved == [("new.md", b"abcdef", False)]
+
+
+def test_upload_with_overwrite(monkeypatch):
+    import routes
+
+    manager = FakeManager()
+    monkeypatch.setattr(routes, "create_default_skill_manager", lambda: manager)
+    field = FakeField(name="file", filename="custom.md", chunks=[b"data"])
+    request = FakeRequest(fields=[field], query={"overwrite": "true"})
+    response = asyncio.run(routes.upload_skill_handler(request))
+    assert response.status == 201
+    assert manager.saved == [("custom.md", b"data", True)]
 
 
 def test_upload_missing_file_is_400(monkeypatch):
