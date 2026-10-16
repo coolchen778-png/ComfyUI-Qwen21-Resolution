@@ -177,24 +177,7 @@ function installSkillPicker(node, widget) {
         fileInput.click();
     };
 
-    // 1. 添加显式 LiteGraph 原生按钮（放置在 skills 控件紧上方）
-    const btnUpload = node.addWidget?.("button", "⬆ 上传本地 Skill 文件 (.md/.txt)", null, handleUpload, {
-        serialize: false,
-    });
-    const btnRefresh = node.addWidget?.("button", "↻ 刷新 Skill 列表", null, () => load(), {
-        serialize: false,
-    });
 
-    if (btnUpload && btnRefresh && Array.isArray(node.widgets)) {
-        const skillsIdx = node.widgets.indexOf(widget);
-        if (skillsIdx !== -1) {
-            const uIdx = node.widgets.indexOf(btnUpload);
-            if (uIdx !== -1) node.widgets.splice(uIdx, 1);
-            const rIdx = node.widgets.indexOf(btnRefresh);
-            if (rIdx !== -1) node.widgets.splice(rIdx, 1);
-            node.widgets.splice(skillsIdx, 0, btnUpload, btnRefresh);
-        }
-    }
 
     // 如果不支持 DOMWidget，提供友好标签并直接返回
     if (typeof node.addDOMWidget !== "function") {
