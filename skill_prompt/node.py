@@ -242,8 +242,6 @@ class QwenMultiSkillPromptGenerator:
         image_5=None,
         **kwargs,
     ):
-        if not isinstance(task, str) or not task.strip():
-            raise SkillPromptError("输入验证", "任务描述不能为空")
         unexpected_images = [
             name for name in kwargs if name.startswith("image_")
         ]
@@ -251,6 +249,14 @@ class QwenMultiSkillPromptGenerator:
             raise SkillPromptError("图片转换", "最多支持 5 张参考图")
         combined_skills = self._resolve_skills_text(skills)
         images = prepare_images((image_1, image_2, image_3, image_4, image_5))
+
+        clean_task = task.strip() if isinstance(task, str) else ""
+        if not clean_task:
+            if images:
+                clean_task = "请根据参考图像，详细分析画面主体、光影与构图细节，输出用于图像生成的优质提示词。"
+            else:
+                clean_task = "请生成一段丰富细致、富有画面感的高质量图像生成提示词。"
+
         system_prompt = role_prompt.strip()
         if combined_skills:
             if system_prompt:
@@ -258,7 +264,7 @@ class QwenMultiSkillPromptGenerator:
             system_prompt += "请严格参考并联合执行以下 Skill：\n\n" + combined_skills
         request = PromptRequest(
             system_prompt=system_prompt,
-            task=task.strip(),
+            task=clean_task,
             images=images,
             max_new_tokens=int(max_new_tokens),
             temperature=float(temperature),
