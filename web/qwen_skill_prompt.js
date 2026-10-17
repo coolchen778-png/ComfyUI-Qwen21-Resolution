@@ -3,6 +3,7 @@ import { api } from "../../scripts/api.js";
 import {
     VISIBLE_BACKEND_CHOICES,
     WIDGET_LABELS,
+    extractPromptFromExecutedMessage,
     isWidgetVisible,
     normalizeMode,
     setCbkkNodeSource,
@@ -52,9 +53,9 @@ function syncModeWidgets(node) {
         );
     }
 
-    const computed = node.computeSize ? node.computeSize() : [400, 480];
+    const computed = node.computeSize ? node.computeSize() : [400, 620];
     const targetW = Math.max(node.size?.[0] || 0, computed[0] || 0, 420);
-    const targetH = Math.max(node.size?.[1] || 0, computed[1] || 0, 480);
+    const targetH = Math.max(node.size?.[1] || 0, computed[1] || 0, 620);
     node.setSize?.([targetW, targetH]);
     node.setDirtyCanvas?.(true, true);
 }
@@ -475,6 +476,208 @@ function installSkillPicker(node, widget) {
     load();
 }
 
+function installPromptPreview(node) {
+    if (node.__cbkkPromptPreviewInstalled) return;
+    node.__cbkkPromptPreviewInstalled = true;
+
+    if (typeof node.addDOMWidget !== "function") return;
+
+    const wrap = document.createElement("div");
+    wrap.style.cssText = [
+        "display:flex",
+        "flex-direction:column",
+        "gap:6px",
+        "padding:8px",
+        "background:#1b2220",
+        "color:#e5ebe8",
+        "font:12px sans-serif",
+        "border:1px solid #384843",
+        "border-radius:6px",
+        "box-sizing:border-box",
+        "width:100%",
+        "min-height:140px",
+        "--comfy-widget-min-height:140px",
+    ].join(";");
+
+    const header = document.createElement("div");
+    header.style.cssText = "display:flex;justify-content:space-between;align-items:center;user-select:none";
+
+    const titleBox = document.createElement("div");
+    titleBox.style.cssText = "display:flex;align-items:center;gap:6px";
+
+    const title = document.createElement("span");
+    title.textContent = "✨ 生成提示词预览";
+    title.style.cssText = "font-weight:700;color:#cde5dc;font-size:12px";
+
+    const countBadge = document.createElement("span");
+    countBadge.style.cssText = "font-size:11px;color:#8ba59c;margin-left:4px";
+    countBadge.textContent = "";
+
+    titleBox.append(title, countBadge);
+
+    const btnGroup = document.createElement("div");
+    btnGroup.style.cssText = "display:flex;gap:5px";
+
+    const copyBtn = document.createElement("button");
+    copyBtn.type = "button";
+    copyBtn.textContent = "📋 复制提示词";
+    copyBtn.title = "点击复制生成的完整提示词到剪贴板";
+    copyBtn.draggable = false;
+    copyBtn.style.cssText = [
+        "padding:3px 8px",
+        "border:1px solid #3c6e5f",
+        "border-radius:4px",
+        "background:#205043",
+        "color:#d4f5ec",
+        "cursor:pointer",
+        "font-size:11px",
+        "font-weight:600",
+        "user-select:none",
+        "white-space:nowrap",
+        "transition:all 0.2s ease",
+    ].join(";");
+    copyBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
+    copyBtn.addEventListener("mousedown", (e) => e.stopPropagation());
+
+    const clearBtn = document.createElement("button");
+    clearBtn.type = "button";
+    clearBtn.textContent = "清空";
+    clearBtn.title = "清空当前预览内容";
+    clearBtn.draggable = false;
+    clearBtn.style.cssText = [
+        "padding:3px 7px",
+        "border:1px solid #4a5853",
+        "border-radius:4px",
+        "background:#28322f",
+        "color:#b5c4bf",
+        "cursor:pointer",
+        "font-size:11px",
+        "user-select:none",
+        "white-space:nowrap",
+    ].join(";");
+    clearBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
+    clearBtn.addEventListener("mousedown", (e) => e.stopPropagation());
+
+    btnGroup.append(copyBtn, clearBtn);
+    header.append(titleBox, btnGroup);
+
+    const textarea = document.createElement("textarea");
+    textarea.readOnly = true;
+    textarea.placeholder = "尚未执行生成。运行工作流后，生成的提示词将在此处直接展示并支持一键复制。";
+    textarea.style.cssText = [
+        "width:100%",
+        "height:100px",
+        "min-height:90px",
+        "max-height:300px",
+        "box-sizing:border-box",
+        "resize:vertical",
+        "background:#121716",
+        "color:#ebf3f0",
+        "border:1px solid #2e3d38",
+        "border-radius:4px",
+        "padding:8px",
+        "font-family:Consolas, Monaco, 'Lucida Console', monospace, system-ui, sans-serif",
+        "font-size:12px",
+        "line-height:1.5",
+        "outline:none",
+        "overflow-y:auto",
+        "white-space:pre-wrap",
+        "word-break:break-word",
+        "user-select:text",
+    ].join(";");
+
+    textarea.addEventListener("pointerdown", (e) => e.stopPropagation());
+    textarea.addEventListener("mousedown", (e) => e.stopPropagation());
+    textarea.addEventListener("wheel", (e) => e.stopPropagation());
+
+    wrap.append(header, textarea);
+
+    const updateDisplay = (text) => {
+        const clean = typeof text === "string" ? text : "";
+        textarea.value = clean;
+        if (clean) {
+            countBadge.textContent = `(${clean.length} 字符)`;
+        } else {
+            countBadge.textContent = "";
+        }
+        node.setDirtyCanvas?.(true, true);
+    };
+
+    copyBtn.onclick = async (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        const content = textarea.value;
+        if (!content) return;
+        let success = false;
+        try {
+            if (navigator?.clipboard?.writeText) {
+                await navigator.clipboard.writeText(content);
+                success = true;
+            }
+        } catch {
+            success = false;
+        }
+        if (!success) {
+            try {
+                textarea.select();
+                success = document.execCommand("copy");
+                window.getSelection()?.removeAllRanges();
+            } catch {
+                success = false;
+            }
+        }
+        if (success) {
+            const oldText = copyBtn.textContent;
+            copyBtn.textContent = "✓ 已复制!";
+            copyBtn.style.background = "#2e7d58";
+            copyBtn.style.borderColor = "#44b27f";
+            setTimeout(() => {
+                copyBtn.textContent = oldText;
+                copyBtn.style.background = "#205043";
+                copyBtn.style.borderColor = "#3c6e5f";
+            }, 1500);
+        } else {
+            alert("复制失败，请手动在文本框中全选复制。");
+        }
+    };
+
+    clearBtn.onclick = (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        if (!node.properties) node.properties = {};
+        node.properties["cbkk_last_prompt"] = "";
+        updateDisplay("");
+    };
+
+    const savedPrompt = node.properties?.["cbkk_last_prompt"] || "";
+    if (savedPrompt) {
+        updateDisplay(savedPrompt);
+    }
+
+    node.__cbkkUpdatePromptPreview = (message) => {
+        const text = extractPromptFromExecutedMessage(message);
+        if (text) {
+            if (!node.properties) node.properties = {};
+            node.properties["cbkk_last_prompt"] = text;
+            updateDisplay(text);
+        }
+    };
+
+    try {
+        const domWidget = node.addDOMWidget("cbkk_prompt_preview", "customwidget", wrap, {
+            serialize: false,
+            hideOnZoom: false,
+            getMinHeight: () => 140,
+            computeSize: () => [node.size?.[0] || 420, 140],
+        });
+        if (domWidget) {
+            domWidget.serialize = false;
+        }
+    } catch (error) {
+        console.warn("[cbkk] Prompt preview DOMWidget 挂载失败", error);
+    }
+}
+
 function setupNode(node) {
     if (!node || !node.widgets) return;
     localizeWidgets(node);
@@ -500,6 +703,22 @@ function setupNode(node) {
         installSkillPicker(node, skills);
     }
 
+    installPromptPreview(node);
+
+    if (!node.__cbkkExecutedHooked) {
+        node.__cbkkExecutedHooked = true;
+        const originalInstanceExecuted = node.onExecuted;
+        node.onExecuted = function (message) {
+            const result = originalInstanceExecuted?.apply(this, arguments);
+            try {
+                node.__cbkkUpdatePromptPreview?.(message);
+            } catch (err) {
+                console.error("[cbkk] 更新提示词预览失败:", err);
+            }
+            return result;
+        };
+    }
+
     syncModeWidgets(node);
 }
 
@@ -522,6 +741,17 @@ app.registerExtension({
         nodeType.prototype.onConfigure = function () {
             const result = originalConfigure?.apply(this, arguments);
             setTimeout(() => setupNode(this), 10);
+            return result;
+        };
+
+        const originalExecuted = nodeType.prototype.onExecuted;
+        nodeType.prototype.onExecuted = function (message) {
+            const result = originalExecuted?.apply(this, arguments);
+            try {
+                this.__cbkkUpdatePromptPreview?.(message);
+            } catch (err) {
+                console.error("[cbkk] 更新提示词预览失败:", err);
+            }
             return result;
         };
     },

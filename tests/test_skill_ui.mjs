@@ -5,6 +5,7 @@ import {
     MODE_API,
     MODE_LOCAL,
     VISIBLE_BACKEND_CHOICES,
+    extractPromptFromExecutedMessage,
     isWidgetVisible,
     modelKind,
     normalizeMode,
@@ -70,3 +71,13 @@ test("API mode hides local selectors and shows API settings", () => {
     assert.equal(isWidgetVisible("api_base_url", MODE_API, "GGUF｜m.gguf"), true);
     assert.equal(isWidgetVisible("api_model", MODE_API, "GGUF｜m.gguf"), true);
 });
+
+
+test("extracts prompt from various executed message formats", () => {
+    assert.equal(extractPromptFromExecutedMessage(null), "");
+    assert.equal(extractPromptFromExecutedMessage({ text: ["A beautiful sunset"] }), "A beautiful sunset");
+    assert.equal(extractPromptFromExecutedMessage({ text: ["Line 1", "Line 2"] }), "Line 1\nLine 2");
+    assert.equal(extractPromptFromExecutedMessage({ output: { text: ["Direct output"] } }), "Direct output");
+    assert.equal(extractPromptFromExecutedMessage("Raw string prompt"), "Raw string prompt");
+});
+

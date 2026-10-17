@@ -115,6 +115,7 @@ class QwenMultiSkillPromptGenerator:
 
     RETURN_TYPES = ("STRING", "STRING", "STRING")
     RETURN_NAMES = ("final_prompt", "raw_response", "combined_skills")
+    OUTPUT_NODE = True
     FUNCTION = "generate"
     CATEGORY = "cbkk"
 
@@ -281,7 +282,10 @@ class QwenMultiSkillPromptGenerator:
             final_prompt = (
                 strip_leading_think(raw_response) if strip_thinking else raw_response
             )
-            return final_prompt, raw_response, combined_skills
+            return {
+                "ui": {"text": [final_prompt]},
+                "result": (final_prompt, raw_response, combined_skills),
+            }
         finally:
             if unload_after_generate:
                 adapter.unload(config)

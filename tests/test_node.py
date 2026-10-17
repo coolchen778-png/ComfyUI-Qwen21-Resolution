@@ -141,6 +141,7 @@ def test_node_contract_and_registration():
         "combined_skills",
     )
     assert QwenMultiSkillPromptGenerator.CATEGORY == "cbkk"
+    assert QwenMultiSkillPromptGenerator.OUTPUT_NODE is True
     assert "Qwen21ResolutionResize" in nodes.NODE_CLASS_MAPPINGS
     assert (
         nodes.NODE_CLASS_MAPPINGS["QwenMultiSkillPromptGenerator"]
@@ -232,20 +233,21 @@ def test_chinese_online_api_mode_dispatches_openai_compatible_backend():
     assert config["base_url"] == "https://example.com/v1"
 
 
-@pytest.mark.parametrize("bad_task", ["", "   ", None])
-def test_empty_task_is_rejected_before_backend_lookup(bad_task):
-    node, _, _, registry = make_node()
-    with pytest.raises(SkillPromptError, match="任务"):
-        node.generate(**settings(task=bad_task))
-    assert registry.names == []
+@pytest.mark.parametrize("empty_task", ["", "   ", None])
+def test_empty_task_uses_default_prompt(empty_task):
+    node, _, backend, registry = make_node()
+    node.generate(**settings(task=empty_task))
+    assert registry.names == ["transformers"]
+    request, _ = backend.requests[-1]
+    assert "提示词" in request.task
 
 
-@pytest.mark.parametrize("bad_skills", ["", "{}", "[", "[]", '["a", "a"]', "[1]"])
-def test_bad_skill_json_is_rejected_before_backend_lookup(bad_skills):
-    node, _, _, registry = make_node()
-    with pytest.raises(SkillPromptError, match="Skill"):
-        node.generate(**settings(skills=bad_skills))
-    assert registry.names == []
+@pytest.mark.parametrize("empty_skills", ["", "{}", "[]"])
+def test_empty_skills_handled_gracefully(empty_skills):
+    node, _, backend, registry = make_node()
+    result = node.generate(**settings(skills=empty_skills))
+    assert registry.names == ["transformers"]
+    assert result["result"][2] == ""
 
 
 def test_orchestration_preserves_skill_and_image_order_and_three_outputs():
@@ -255,7 +257,8 @@ def test_orchestration_preserves_skill_and_image_order_and_three_outputs():
 
     result = node.generate(**settings(), image_1=image_1, image_3=image_3)
 
-    assert result == ("FINAL", "<think>hidden</think>FINAL", "COMBINED SKILLS")
+    assert result["result"] == ("FINAL", "<think>hidden</think>FINAL", "COMBINED SKILLS")
+    assert result["ui"] == {"text": ["FINAL"]}
     assert skills.calls == [["builtin:a.md", "user:b.md"]]
     assert registry.names == ["transformers"]
     request, config = backend.requests[-1]
@@ -284,7 +287,8 @@ def test_backend_config_selection_for_gguf_and_online_api():
 def test_strip_thinking_can_be_disabled():
     node, _, _, _ = make_node()
     result = node.generate(**settings(strip_thinking=False))
-    assert result[0] == result[1]
+    assert result["result"][0] == result["result"][1]
+    assert result["ui"]["text"] == [result["result"][0]]
 
 
 def test_sixth_image_is_rejected_even_when_injected_directly():

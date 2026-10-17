@@ -58,3 +58,20 @@ export function isWidgetVisible(name, mode, localModelSelection) {
     if (name.startsWith("gguf_") || name.startsWith("transformers_")) return false;
     return true;
 }
+
+export function extractPromptFromExecutedMessage(message) {
+    if (!message) return "";
+    let val = message.text ?? message.output?.text ?? message;
+    if (Array.isArray(val)) {
+        val = val.join("\n");
+    }
+    if (typeof val === "string") return val;
+    if (typeof val === "object") {
+        try {
+            return JSON.stringify(val, null, 2);
+        } catch {
+            return String(val);
+        }
+    }
+    return String(val || "");
+}
