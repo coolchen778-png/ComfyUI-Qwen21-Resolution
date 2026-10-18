@@ -4,6 +4,7 @@ export const CBKK_NODE_NAMES = Object.freeze([
     "Qwen21ResolutionResize",
     "QwenMultiSkillPromptGenerator",
     "QwenSkillLoader",
+    "QwenSkillPromptPreview",
 ]);
 
 export function setCbkkNodeSource(defs) {

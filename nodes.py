@@ -2,9 +2,17 @@ import torch
 import torch.nn.functional as F
 
 try:
-    from .skill_prompt.node import QwenMultiSkillPromptGenerator, QwenSkillLoader
+    from .skill_prompt.node import (
+        QwenMultiSkillPromptGenerator,
+        QwenSkillLoader,
+        QwenSkillPromptPreview,
+    )
 except ImportError:
-    from skill_prompt.node import QwenMultiSkillPromptGenerator, QwenSkillLoader
+    from skill_prompt.node import (
+        QwenMultiSkillPromptGenerator,
+        QwenSkillLoader,
+        QwenSkillPromptPreview,
+    )
 
 try:
     import comfy.utils
@@ -116,10 +124,12 @@ NODE_CLASS_MAPPINGS = {
     "Qwen21ResolutionResize": Qwen21ResolutionResize,
     "QwenMultiSkillPromptGenerator": QwenMultiSkillPromptGenerator,
     "QwenSkillLoader": QwenSkillLoader,
+    "QwenSkillPromptPreview": QwenSkillPromptPreview,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "Qwen21ResolutionResize": "cbkk｜Qwen 2.1 分辨率自动匹配",
     "QwenMultiSkillPromptGenerator": "cbkk｜Skill 提示词生成器",
     "QwenSkillLoader": "cbkk｜Skill 知识库加载器",
+    "QwenSkillPromptPreview": "cbkk｜Skill 提示词预览",
 }

@@ -10,6 +10,7 @@ import {
 } from "./qwen_skill_prompt_ui.mjs";
 
 const NODE_NAME = "QwenMultiSkillPromptGenerator";
+const PREVIEW_NODE_NAME = "QwenSkillPromptPreview";
 
 function setWidgetVisible(node, widget, visible) {
     if (!widget) return;
@@ -476,7 +477,103 @@ function installSkillPicker(node, widget) {
     load();
 }
 
-function installPromptPreview(node) {
+function spawnConnectedClipNode(sourceNode, btn) {
+    if (!globalThis.LiteGraph || !app.graph) return;
+    const targetName = "CLIPTextEncode";
+    const targetNode = LiteGraph.createNode(targetName);
+    if (!targetNode) {
+        alert("未找到 CLIPTextEncode 节点类型");
+        return;
+    }
+
+    targetNode.pos = [
+        sourceNode.pos[0] + sourceNode.size[0] + 50,
+        sourceNode.pos[1] + Math.max(0, sourceNode.size[1] - 220),
+    ];
+    app.graph.add(targetNode);
+
+    const textWidget = targetNode.widgets?.find((w) => w.name === "text");
+    if (textWidget) {
+        if (typeof targetNode.convertWidgetToInput === "function") {
+            targetNode.convertWidgetToInput(textWidget);
+        }
+    }
+
+    const textInputIdx = targetNode.inputs?.findIndex((input) => input.name === "text");
+    if (textInputIdx !== -1) {
+        sourceNode.connect(0, targetNode, textInputIdx);
+    }
+
+    app.canvas?.selectNode(targetNode, false);
+    app.graph.setDirtyCanvas(true, true);
+
+    if (btn) {
+        const oldText = btn.textContent;
+        btn.textContent = "✓ 已引出并连接!";
+        btn.style.background = "#2a5d7c";
+        btn.style.borderColor = "#4c8db8";
+        setTimeout(() => {
+            btn.textContent = oldText;
+            btn.style.background = "#1d3547";
+            btn.style.borderColor = "#36536b";
+        }, 1600);
+    }
+}
+
+function pickTargetAndFillPrompt(promptText, btn) {
+    const textToFill = (typeof promptText === "string" ? promptText : "").trim();
+    if (!textToFill) {
+        alert("当前暂无可填入的提示词内容，请先生成或输入提示词。");
+        return;
+    }
+    if (btn) {
+        btn.textContent = "👆 点击目标节点...";
+        btn.style.background = "#6b4919";
+        btn.style.borderColor = "#c48831";
+    }
+
+    const handler = (e) => {
+        if (btn) {
+            btn.textContent = "🎯 填入文本框";
+            btn.style.background = "#283337";
+            btn.style.borderColor = "#485459";
+        }
+        window.removeEventListener("pointerdown", handler, true);
+
+        const canvas = app.canvas;
+        if (!canvas || !app.graph) return;
+        const pos = canvas.convertEventToCanvasOffset(e);
+        const targetNode = app.graph.getNodeOnPos(pos[0], pos[1]);
+        if (!targetNode) return;
+
+        const textWidget = targetNode.widgets?.find(
+            (w) => w.name === "text" || w.name === "prompt" || w.name === "positive" || (typeof w.value === "string" && w.type === "customtext")
+        ) || targetNode.widgets?.find((w) => typeof w.value === "string");
+
+        if (textWidget) {
+            textWidget.value = textToFill;
+            textWidget.callback?.(textToFill);
+            targetNode.setDirtyCanvas?.(true, true);
+            app.graph.setDirtyCanvas(true, true);
+            if (btn) {
+                btn.textContent = "✓ 已填入目标文本框!";
+                btn.style.background = "#2e7d58";
+                setTimeout(() => {
+                    btn.textContent = "🎯 填入文本框";
+                    btn.style.background = "#283337";
+                }, 1500);
+            }
+        } else {
+            alert(`节点「${targetNode.title || targetNode.type}」中未找到可填入的文本框。`);
+        }
+    };
+
+    setTimeout(() => {
+        window.addEventListener("pointerdown", handler, { capture: true, once: true });
+    }, 60);
+}
+
+function installPromptPreview(node, customTitle = "✨ 生成提示词预览") {
     if (node.__cbkkPromptPreviewInstalled) return;
     node.__cbkkPromptPreviewInstalled = true;
 
@@ -500,13 +597,13 @@ function installPromptPreview(node) {
     ].join(";");
 
     const header = document.createElement("div");
-    header.style.cssText = "display:flex;justify-content:space-between;align-items:center;user-select:none";
+    header.style.cssText = "display:flex;justify-content:space-between;align-items:center;user-select:none;flex-wrap:wrap;gap:4px";
 
     const titleBox = document.createElement("div");
     titleBox.style.cssText = "display:flex;align-items:center;gap:6px";
 
     const title = document.createElement("span");
-    title.textContent = "✨ 生成提示词预览";
+    title.textContent = customTitle;
     title.style.cssText = "font-weight:700;color:#cde5dc;font-size:12px";
 
     const countBadge = document.createElement("span");
@@ -516,15 +613,15 @@ function installPromptPreview(node) {
     titleBox.append(title, countBadge);
 
     const btnGroup = document.createElement("div");
-    btnGroup.style.cssText = "display:flex;gap:5px";
+    btnGroup.style.cssText = "display:flex;gap:4px;flex-wrap:wrap";
 
     const copyBtn = document.createElement("button");
     copyBtn.type = "button";
-    copyBtn.textContent = "📋 复制提示词";
+    copyBtn.textContent = "📋 复制";
     copyBtn.title = "点击复制生成的完整提示词到剪贴板";
     copyBtn.draggable = false;
     copyBtn.style.cssText = [
-        "padding:3px 8px",
+        "padding:3px 7px",
         "border:1px solid #3c6e5f",
         "border-radius:4px",
         "background:#205043",
@@ -538,6 +635,57 @@ function installPromptPreview(node) {
     ].join(";");
     copyBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
     copyBtn.addEventListener("mousedown", (e) => e.stopPropagation());
+
+    const spawnBtn = document.createElement("button");
+    spawnBtn.type = "button";
+    spawnBtn.textContent = "🔗 引出文本节点";
+    spawnBtn.title = "在右侧自动创建 CLIP 文本编码器，并将文本框自动转换为输入后与当前提示词相连";
+    spawnBtn.draggable = false;
+    spawnBtn.style.cssText = [
+        "padding:3px 7px",
+        "border:1px solid #36536b",
+        "border-radius:4px",
+        "background:#1d3547",
+        "color:#d2e7f7",
+        "cursor:pointer",
+        "font-size:11px",
+        "font-weight:600",
+        "user-select:none",
+        "white-space:nowrap",
+        "transition:all 0.2s ease",
+    ].join(";");
+    spawnBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
+    spawnBtn.addEventListener("mousedown", (e) => e.stopPropagation());
+    spawnBtn.onclick = (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        spawnConnectedClipNode(node, spawnBtn);
+    };
+
+    const fillBtn = document.createElement("button");
+    fillBtn.type = "button";
+    fillBtn.textContent = "🎯 填入文本框";
+    fillBtn.title = "点击后，直接在画布上点击任意节点的文本框（如已有的 CLIPTextEncode），即可将提示词填入";
+    fillBtn.draggable = false;
+    fillBtn.style.cssText = [
+        "padding:3px 7px",
+        "border:1px solid #485459",
+        "border-radius:4px",
+        "background:#283337",
+        "color:#cfdcde",
+        "cursor:pointer",
+        "font-size:11px",
+        "user-select:none",
+        "white-space:nowrap",
+        "transition:all 0.2s ease",
+    ].join(";");
+    fillBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
+    fillBtn.addEventListener("mousedown", (e) => e.stopPropagation());
+    fillBtn.onclick = (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        pickTargetAndFillPrompt(textarea.value, fillBtn);
+    };
 
     const clearBtn = document.createElement("button");
     clearBtn.type = "button";
@@ -558,7 +706,7 @@ function installPromptPreview(node) {
     clearBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
     clearBtn.addEventListener("mousedown", (e) => e.stopPropagation());
 
-    btnGroup.append(copyBtn, clearBtn);
+    btnGroup.append(copyBtn, spawnBtn, fillBtn, clearBtn);
     header.append(titleBox, btnGroup);
 
     const textarea = document.createElement("textarea");
@@ -722,12 +870,71 @@ function setupNode(node) {
     syncModeWidgets(node);
 }
 
+function setupPreviewNode(node) {
+    if (!node) return;
+    if (node.widgets) {
+        for (const w of node.widgets) {
+            if (w.name === "text") {
+                setWidgetVisible(node, w, false);
+            }
+        }
+    }
+    installPromptPreview(node, "✨ 提示词展示与中继");
+
+    if (!node.__cbkkExecutedHooked) {
+        node.__cbkkExecutedHooked = true;
+        const originalInstanceExecuted = node.onExecuted;
+        node.onExecuted = function (message) {
+            const result = originalInstanceExecuted?.apply(this, arguments);
+            try {
+                node.__cbkkUpdatePromptPreview?.(message);
+            } catch (err) {
+                console.error("[cbkk] 更新提示词预览失败:", err);
+            }
+            return result;
+        };
+    }
+
+    const targetW = Math.max(node.size?.[0] || 0, 420);
+    const targetH = Math.max(node.size?.[1] || 0, 200);
+    node.setSize?.([targetW, targetH]);
+    node.setDirtyCanvas?.(true, true);
+}
+
 app.registerExtension({
     name: "cbkk.qwen_multi_skill_prompt.zh_cn",
     addCustomNodeDefs(defs) {
         setCbkkNodeSource(defs);
     },
     async beforeRegisterNodeDef(nodeType, nodeData) {
+        if (nodeData?.name === PREVIEW_NODE_NAME) {
+            const originalCreated = nodeType.prototype.onNodeCreated;
+            nodeType.prototype.onNodeCreated = function () {
+                const result = originalCreated?.apply(this, arguments);
+                setTimeout(() => setupPreviewNode(this), 10);
+                return result;
+            };
+
+            const originalConfigure = nodeType.prototype.onConfigure;
+            nodeType.prototype.onConfigure = function () {
+                const result = originalConfigure?.apply(this, arguments);
+                setTimeout(() => setupPreviewNode(this), 10);
+                return result;
+            };
+
+            const originalExecuted = nodeType.prototype.onExecuted;
+            nodeType.prototype.onExecuted = function (message) {
+                const result = originalExecuted?.apply(this, arguments);
+                try {
+                    this.__cbkkUpdatePromptPreview?.(message);
+                } catch (err) {
+                    console.error("[cbkk] 更新提示词预览失败:", err);
+                }
+                return result;
+            };
+            return;
+        }
+
         if (nodeData?.name !== NODE_NAME) return;
 
         const originalCreated = nodeType.prototype.onNodeCreated;
@@ -758,11 +965,15 @@ app.registerExtension({
     nodeCreated(node) {
         if (node?.comfyClass === NODE_NAME) {
             setTimeout(() => setupNode(node), 20);
+        } else if (node?.comfyClass === PREVIEW_NODE_NAME) {
+            setTimeout(() => setupPreviewNode(node), 20);
         }
     },
     loadedGraphNode(node) {
         if (node?.comfyClass === NODE_NAME) {
             setTimeout(() => setupNode(node), 20);
+        } else if (node?.comfyClass === PREVIEW_NODE_NAME) {
+            setTimeout(() => setupPreviewNode(node), 20);
         }
     },
 });

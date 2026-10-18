@@ -143,6 +143,7 @@ def test_node_contract_and_registration():
     assert QwenMultiSkillPromptGenerator.CATEGORY == "cbkk"
     assert QwenMultiSkillPromptGenerator.OUTPUT_NODE is True
     assert "Qwen21ResolutionResize" in nodes.NODE_CLASS_MAPPINGS
+    assert "QwenSkillPromptPreview" in nodes.NODE_CLASS_MAPPINGS
     assert (
         nodes.NODE_CLASS_MAPPINGS["QwenMultiSkillPromptGenerator"]
         is QwenMultiSkillPromptGenerator
@@ -323,3 +324,21 @@ def test_tensor_batch_greater_than_one_is_rejected_before_backend():
     with pytest.raises(SkillPromptError, match="batch=1"):
         node.generate(**settings(), image_1=torch.zeros((2, 1, 1, 3)))
     assert backend.requests == []
+
+
+def test_prompt_preview_node_contract_and_execution():
+    from skill_prompt.node import QwenSkillPromptPreview
+
+    inputs = QwenSkillPromptPreview.INPUT_TYPES()
+    assert "text" in inputs["required"]
+    assert QwenSkillPromptPreview.RETURN_TYPES == ("STRING",)
+    assert QwenSkillPromptPreview.RETURN_NAMES == ("text",)
+    assert QwenSkillPromptPreview.OUTPUT_NODE is True
+
+    preview_node = QwenSkillPromptPreview()
+    res = preview_node.preview("sample prompt text")
+    assert res == {
+        "ui": {"text": ["sample prompt text"]},
+        "result": ("sample prompt text",),
+    }
+

@@ -346,3 +346,29 @@ class QwenSkillLoader:
 
         return ("\n\n".join(parts),)
 
+
+class QwenSkillPromptPreview:
+    """
+    cbkk｜Skill 提示词预览 / 文本中继
+    接收并展示提示词文本，同时输出文本（中继），可直连下游节点（如 CLIPTextEncode 文本框或其它文本输入）。
+    """
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "text": ("STRING", {"forceInput": True, "multiline": True}),
+            },
+        }
+
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("text",)
+    FUNCTION = "preview"
+    OUTPUT_NODE = True
+    CATEGORY = "cbkk"
+
+    def preview(self, text):
+        val = text if isinstance(text, str) else str(text)
+        return {"ui": {"text": [val]}, "result": (val,)}
+
+
