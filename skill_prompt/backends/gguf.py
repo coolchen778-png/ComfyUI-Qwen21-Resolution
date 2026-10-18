@@ -19,8 +19,32 @@ _HANDLER_ATTRIBUTES = {
 _HANDLER_CHOICES = {"auto", *_HANDLER_ATTRIBUTES}
 
 
+def _ensure_cuda_backend(runtime: Any) -> None:
+    try:
+        import os
+        from pathlib import Path
+
+        module_file = getattr(runtime, "__file__", None)
+        if module_file:
+            lib_dir = Path(module_file).parent / "lib"
+            if lib_dir.is_dir():
+                lib_str = str(lib_dir)
+                if hasattr(os, "add_dll_directory"):
+                    try:
+                        os.add_dll_directory(lib_str)
+                    except Exception:
+                        pass
+                os.environ["PATH"] = lib_str + os.pathsep + os.environ.get("PATH", "")
+                if hasattr(runtime, "ggml_backend_load_all_from_path"):
+                    runtime.ggml_backend_load_all_from_path(lib_str.encode("utf-8"))
+    except Exception:
+        pass
+
+
 def _load_runtime() -> Any:
     import llama_cpp
+
+    _ensure_cuda_backend(llama_cpp)
 
     try:
         from llama_cpp import llama_chat_format
@@ -176,6 +200,7 @@ class GGUFBackend:
 
     def _load_model(self, config: Mapping[str, Any]) -> Any:
         runtime = self._runtime()
+        _ensure_cuda_backend(runtime)
         model_path, mmproj_path = self._paths(config)
         try:
             handler = select_handler(
