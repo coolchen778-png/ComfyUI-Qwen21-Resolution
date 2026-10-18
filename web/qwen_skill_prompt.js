@@ -804,11 +804,9 @@ function installPromptPreview(node, customTitle = "✨ 生成提示词预览") {
 
     node.__cbkkUpdatePromptPreview = (message) => {
         const text = extractPromptFromExecutedMessage(message);
-        if (text) {
-            if (!node.properties) node.properties = {};
-            node.properties["cbkk_last_prompt"] = text;
-            updateDisplay(text);
-        }
+        if (!node.properties) node.properties = {};
+        node.properties["cbkk_last_prompt"] = text || "";
+        updateDisplay(text || "");
     };
 
     try {

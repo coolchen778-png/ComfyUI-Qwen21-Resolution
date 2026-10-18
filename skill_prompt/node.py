@@ -1,5 +1,6 @@
 import json
 import math
+import re
 from pathlib import Path
 from collections.abc import Callable
 from typing import Any
@@ -265,6 +266,10 @@ class QwenMultiSkillPromptGenerator:
             if system_prompt:
                 system_prompt += "\n\n"
             system_prompt += "请严格参考并联合执行以下 Skill：\n\n" + combined_skills
+        if strip_thinking:
+            if system_prompt:
+                system_prompt += "\n\n"
+            system_prompt += "【输出规范】请直接输出用于生图的最终提示词正文（Prompt），严禁输出任何 <think> 思考过程或分析过程，直接给出提示词。"
         request = PromptRequest(
             system_prompt=system_prompt,
             task=clean_task,
@@ -294,6 +299,10 @@ class QwenMultiSkillPromptGenerator:
             final_prompt = (
                 strip_leading_think(raw_response) if strip_thinking else raw_response
             )
+            if not final_prompt and raw_response.strip():
+                cleaned = re.sub(r"^\s*<think>", "", raw_response, flags=re.IGNORECASE).strip()
+                cleaned = re.sub(r"</think>\s*$", "", cleaned, flags=re.IGNORECASE).strip()
+                final_prompt = cleaned if cleaned else raw_response.strip()
             return {
                 "ui": {"text": [final_prompt]},
                 "result": (final_prompt, raw_response, combined_skills),
