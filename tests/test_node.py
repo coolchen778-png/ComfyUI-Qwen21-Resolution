@@ -285,6 +285,21 @@ def test_backend_config_selection_for_gguf_and_online_api():
     assert api["api_key_env"] == "OPENAI_API_KEY"
 
 
+def test_gguf_auto_expands_n_ctx_when_needed():
+    node, _, backend, _ = make_node("ok")
+    huge_task = "x" * 6000
+    node.generate(
+        **settings(
+            backend="gguf",
+            task=huge_task,
+            gguf_n_ctx=1024,
+            max_new_tokens=512,
+        )
+    )
+    _, gguf = backend.requests[-1]
+    assert gguf["n_ctx"] >= 4096
+
+
 def test_strip_thinking_can_be_disabled():
     node, _, _, _ = make_node()
     result = node.generate(**settings(strip_thinking=False))

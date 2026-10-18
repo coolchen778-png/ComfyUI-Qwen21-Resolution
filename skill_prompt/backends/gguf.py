@@ -228,11 +228,18 @@ class GGUFBackend:
             estimate_text_tokens(request.system_prompt, request.task)
             + len(request.images) * 1024
         )
-        if estimated + request.max_new_tokens > config["n_ctx"]:
+        if estimated >= config["n_ctx"]:
             raise SkillPromptError(
                 "生成",
-                f"文本粗估与输出预算超出上下文限制 {config['n_ctx']}",
+                f"输入内容预估 Token ({estimated}) 已超出上下文限制 ({config['n_ctx']})，请调大上下文长度或减少输入的 Skill / 图片",
             )
+        available_output_tokens = config["n_ctx"] - estimated - 32
+        if available_output_tokens < 16:
+            raise SkillPromptError(
+                "生成",
+                f"输入内容预估 Token ({estimated}) 加上最小输出预算已超出上下文限制 ({config['n_ctx']})，请调大上下文长度",
+            )
+        effective_max_tokens = min(request.max_new_tokens, available_output_tokens)
         messages = build_openai_messages(
             request, lambda image: image_to_data_uri(image, max_side=0)
         )
@@ -241,7 +248,7 @@ class GGUFBackend:
                 self._reset_model_state(model)
                 payload = model.create_chat_completion(
                     messages=messages,
-                    max_tokens=request.max_new_tokens,
+                    max_tokens=effective_max_tokens,
                     temperature=request.temperature,
                     seed=request.seed,
                 )

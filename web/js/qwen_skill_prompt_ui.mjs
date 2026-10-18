@@ -30,6 +30,7 @@ export const WIDGET_LABELS = Object.freeze({
     seed: "随机种子",
     strip_thinking: "移除思考过程",
     unload_after_generate: "生成后卸载模型",
+    gguf_n_ctx: "上下文长度 (Token 上限)",
     api_base_url: "API 地址",
     api_model: "API 模型名",
     api_key_env: "API Key 环境变量",
@@ -54,6 +55,9 @@ export function isWidgetVisible(name, mode, localModelSelection) {
     if (name === "local_model") return mode === MODE_LOCAL;
     if (name === "local_mmproj") {
         return mode === MODE_LOCAL && modelKind(localModelSelection) !== "transformers";
+    }
+    if (name === "gguf_n_ctx") {
+        return mode === MODE_LOCAL && modelKind(localModelSelection) === "gguf";
     }
     if (name.startsWith("api_")) return mode === MODE_API;
     if (name.startsWith("gguf_") || name.startsWith("transformers_")) return false;

@@ -59,6 +59,11 @@ test("local mode shows one model selector and only shows mmproj for GGUF", () =>
         isWidgetVisible("local_mmproj", MODE_LOCAL, "Transformers｜Qwen-VL"),
         false,
     );
+    assert.equal(isWidgetVisible("gguf_n_ctx", MODE_LOCAL, "GGUF｜m.gguf"), true);
+    assert.equal(
+        isWidgetVisible("gguf_n_ctx", MODE_LOCAL, "Transformers｜Qwen-VL"),
+        false,
+    );
     assert.equal(isWidgetVisible("api_base_url", MODE_LOCAL, "GGUF｜m.gguf"), false);
     assert.equal(isWidgetVisible("gguf_model_path", MODE_LOCAL, "GGUF｜m.gguf"), false);
     assert.equal(isWidgetVisible("transformers_model", MODE_LOCAL, "GGUF｜m.gguf"), false);

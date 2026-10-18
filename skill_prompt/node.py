@@ -1,4 +1,5 @@
 import json
+import math
 from pathlib import Path
 from collections.abc import Callable
 from typing import Any
@@ -9,6 +10,7 @@ from .backends.openai_compatible import OpenAICompatibleBackend
 from .backends.transformers_backend import TransformersBackend
 from .errors import SkillPromptError
 from .images import prepare_images
+from .messages import estimate_text_tokens
 from .models import (
     LocalModelCatalog,
     NO_LOCAL_MODEL,
@@ -86,7 +88,7 @@ class QwenMultiSkillPromptGenerator:
                 "gguf_model_path": ("STRING", {"default": ""}),
                 "gguf_mmproj_path": ("STRING", {"default": ""}),
                 "gguf_handler": (["auto", "mtmd", "qwen2.5-vl", "qwen3-vl"],),
-                "gguf_n_ctx": ("INT", {"default": 16384, "min": 1, "max": 1048576}),
+                "gguf_n_ctx": ("INT", {"default": 32768, "min": 1, "max": 1048576}),
                 "gguf_n_gpu_layers": ("INT", {"default": -1, "min": -1, "max": 1000}),
                 "gguf_n_threads": ("INT", {"default": 8, "min": 1, "max": 512}),
                 "gguf_n_batch": ("INT", {"default": 512, "min": 1, "max": 8192}),
@@ -219,7 +221,7 @@ class QwenMultiSkillPromptGenerator:
         gguf_model_path="",
         gguf_mmproj_path="",
         gguf_handler="auto",
-        gguf_n_ctx=16384,
+        gguf_n_ctx=32768,
         gguf_n_gpu_layers=-1,
         gguf_n_threads=8,
         gguf_n_batch=512,
@@ -275,6 +277,16 @@ class QwenMultiSkillPromptGenerator:
         selected_backend, config = self._resolve_backend(
             backend, local_model, local_mmproj, values
         )
+        if selected_backend == "gguf":
+            estimated_tokens = (
+                estimate_text_tokens(request.system_prompt, request.task)
+                + len(request.images) * 1024
+            )
+            needed_ctx = estimated_tokens + request.max_new_tokens + 256
+            current_n_ctx = int(config.get("n_ctx", 32768))
+            if needed_ctx > current_n_ctx:
+                expanded = 1 << math.ceil(math.log2(needed_ctx))
+                config["n_ctx"] = max(current_n_ctx, min(expanded, 131072))
         adapter = self.backend_registry.get(selected_backend)
         try:
             adapter.validate(config, has_images=bool(images))

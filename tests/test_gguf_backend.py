@@ -272,6 +272,21 @@ def test_known_context_overflow_stops_before_generation(model_files):
     assert FakeLlama.instances[-1].calls == []
 
 
+def test_context_budget_clamps_max_tokens_instead_of_failing(model_files):
+    from skill_prompt.backends.gguf import GGUFBackend
+
+    model, _ = model_files
+    backend = GGUFBackend(runtime_loader=runtime)
+    result = backend.generate(
+        request(task="hello world", max_new_tokens=100),
+        config(model, None, n_ctx=60),
+    )
+    assert result == "GGUF prompt"
+    call = FakeLlama.instances[-1].calls[-1]
+    assert call["max_tokens"] < 100
+    assert call["max_tokens"] >= 16
+
+
 def test_cache_key_reuses_same_load_and_changes_for_loading_options(model_files):
     from skill_prompt.backends.gguf import GGUFBackend
 
