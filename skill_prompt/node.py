@@ -50,6 +50,16 @@ def create_default_backend_registry() -> BackendRegistry:
     return registry
 
 
+DEFAULT_ROLE_PROMPT = (
+    "你是由用户指令驱动的图像编辑提示词优化专家。请结合参考图视觉与所载入的全部 Skill 规则，对用户的原始提示词进行画质升华与专业润色。\n\n"
+    "【核心执行准则】\n"
+    "1. 用户原词即基石：100% 完整继承并保留用户输入的每一个主体、服饰、配件、颜色与修改意图，绝不擅自删减或篡改用户创意。\n"
+    "2. 视觉去遮挡置顶：观察参考图，若存在黑框、文字表情包、水印或杂物遮挡，必须在提示词首句明确声明彻底消除遮挡，并自然补全还原被遮挡的人体躯干与背景。\n"
+    "3. 感官材质与保真锁定：根据用户需求精准补充高阶感官材质并强制使用一揽子保真语句锁定原图人物五官长相、发型发色与光影，严禁脸部走样。\n"
+    "4. 绝对格式铁律：最终输出必须 100% 为纯英文连贯长段落。严禁输出任何中文字符，严禁输出任何开场白、解释说明、Markdown 标题或代码围栏（严禁 ``` 或 json 标记），从第一个英文字母开始直接输出最终生图提示词！"
+)
+
+
 class QwenMultiSkillPromptGenerator:
     def __init__(
         self,
@@ -77,7 +87,7 @@ class QwenMultiSkillPromptGenerator:
                 "role_prompt": (
                     "STRING",
                     {
-                        "default": "你是专业的图像生成提示词编写助手。请结合全部 Skill 和参考图，直接输出最终提示词。",
+                        "default": DEFAULT_ROLE_PROMPT,
                         "multiline": True,
                     },
                 ),
@@ -261,7 +271,9 @@ class QwenMultiSkillPromptGenerator:
             else:
                 clean_task = "请生成一段丰富细致、富有画面感的高质量图像生成提示词。"
 
-        system_prompt = role_prompt.strip()
+        system_prompt = role_prompt.strip() if isinstance(role_prompt, str) else ""
+        if not system_prompt or system_prompt == "你是专业的图像生成提示词编写助手。请结合全部 Skill 和参考图，直接输出最终提示词。":
+            system_prompt = DEFAULT_ROLE_PROMPT
         if combined_skills:
             if system_prompt:
                 system_prompt += "\n\n"
